@@ -15,7 +15,10 @@ from flask import Flask, request, jsonify, send_from_directory, g
 
 app = Flask(__name__, static_folder="public")
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "bookings.db")
+# Use /tmp on Vercel (serverless), local path otherwise
+IS_VERCEL = os.environ.get("VERCEL", "")
+DB_PATH = "/tmp/bookings.db" if IS_VERCEL else os.path.join(os.path.dirname(__file__), "bookings.db")
+_db_initialized = False
 
 # HubSpot config - set via environment variable
 HUBSPOT_API_KEY = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
@@ -39,6 +42,10 @@ DEAL_STAGES = {
 
 def get_db():
     if "db" not in g:
+        global _db_initialized
+        if not _db_initialized or not os.path.exists(DB_PATH):
+            init_db()
+            _db_initialized = True
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA journal_mode=WAL")

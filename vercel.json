@@ -8,20 +8,8 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/(.*)",
       "dest": "app.py"
-    },
-    {
-      "src": "/admin",
-      "dest": "/public/admin.html"
-    },
-    {
-      "src": "/(.*\\.(html|css|js|ico|png|jpg|svg))",
-      "dest": "/public/$1"
-    },
-    {
-      "src": "/",
-      "dest": "/public/index.html"
     }
   ]
 }
