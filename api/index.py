@@ -13,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 
 app = Flask(__name__)
 
@@ -713,7 +713,7 @@ def create_booking():
             if data.get("hubspot_company_id"):
                 associations.append({
                     "to": {"id": int(data["hubspot_company_id"])},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 190}],
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 202}],
                 })
             hubspot_request("POST", "/crm/v3/objects/notes", {
                 "properties": {"hs_note_body": note_body, "hs_timestamp": datetime.utcnow().isoformat() + "Z"},
