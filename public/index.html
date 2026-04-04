@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POSUP Deployment Bookings</title>
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+
+        .top-bar {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .top-bar h1 { font-size: 20px; font-weight: 700; }
+        .top-bar h1 span { color: var(--primary); }
+        .top-bar nav a {
+            margin-left: 16px;
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .top-bar nav a:hover { color: var(--primary); }
+        .top-bar nav a.active { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 2px; }
+
+        .layout { display: flex; height: calc(100vh - 53px); }
+
+        .sidebar {
+            width: 320px;
+            background: var(--card);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+        .sidebar-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; }
+
+        .filter-group { margin-bottom: 12px; }
+        .filter-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .filter-group select, .filter-group input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            background: var(--bg);
+        }
+
+        .user-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.15s;
+        }
+        .user-chip:hover { background: var(--bg); }
+        .user-chip.active { background: #eff6ff; }
+        .user-chip .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .user-chip .name { flex: 1; }
+        .user-chip .count { font-size: 12px; color: var(--text-muted); }
+
+        .calendar-wrap { flex: 1; padding: 16px; overflow: auto; }
+        #calendar { background: var(--card); border-radius: 8px; padding: 16px; border: 1px solid var(--border); }
+
+        .fc .fc-button-primary {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        .fc .fc-button-primary:hover {
+            background: var(--primary-dark);
+        }
+        .fc .fc-daygrid-event { border-radius: 4px; padding: 2px 4px; }
+        .fc .fc-timegrid-event { border-radius: 4px; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--card);
+            border-radius: 12px;
+            width: 560px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 18px; }
+        .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); }
+        .modal-body { padding: 20px; }
+        .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+        .form-row { margin-bottom: 14px; }
+        .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+        .form-row input, .form-row select, .form-row textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .form-row textarea { min-height: 60px; resize: vertical; }
+        .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-ghost { background: transparent; color: var(--text-muted); }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-success { background: var(--success); color: white; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-install { background: #dbeafe; color: #1d4ed8; }
+        .badge-training { background: #fef3c7; color: #92400e; }
+        .badge-onboarding { background: #d1fae5; color: #065f46; }
+
+        .deal-list { max-height: 200px; overflow-y: auto; }
+        .deal-item {
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+            font-size: 13px;
+        }
+        .deal-item:hover { border-color: var(--primary); }
+        .deal-item.selected { border-color: var(--primary); background: #eff6ff; }
+        .deal-item .deal-name { font-weight: 600; }
+        .deal-item .deal-stage { color: var(--text-muted); font-size: 12px; }
+
+        .loading { text-align: center; padding: 20px; color: var(--text-muted); }
+
+        /* View booking detail panel */
+        .booking-detail { font-size: 14px; }
+        .booking-detail .field { margin-bottom: 10px; }
+        .booking-detail .field-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .booking-detail .field-value { margin-top: 2px; }
+
+        .booking-actions { display: flex; gap: 8px; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1><span>POSUP</span> Deployment Bookings</h1>
+        <nav>
+            <a href="/" class="active">Calendar</a>
+            <a href="/admin">Admin</a>
+        </nav>
+    </div>
+
+    <div class="layout">
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <h3>Team Members</h3>
+                <div id="userFilters"></div>
+            </div>
+            <div class="sidebar-section">
+                <h3>Filter by Type</h3>
+                <div class="filter-group">
+                    <select id="typeFilter">
+                        <option value="">All Types</option>
+                        <option value="install">Install</option>
+                        <option value="training">Training</option>
+                        <option value="onboarding">Onboarding</option>
+                    </select>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h3>Upcoming Bookings</h3>
+                <div id="upcomingList"></div>
+            </div>
+        </div>
+        <div class="calendar-wrap">
+            <div id="calendar"></div>
+        </div>
+    </div>
+
+    <!-- New/Edit Booking Modal -->
+    <div class="modal-overlay" id="bookingModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">New Booking</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="bookingForm">
+                    <input type="hidden" id="bookingId">
+
+                    <div class="form-row">
+                        <label>HubSpot Deal</label>
+                        <input type="text" id="dealSearch" placeholder="Search deals..." oninput="searchDeals(this.value)">
+                        <div class="deal-list" id="dealList" style="margin-top:8px; display:none;"></div>
+                        <input type="hidden" id="selectedDealId">
+                        <div id="selectedDealInfo" style="margin-top:8px;"></div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Title *</label>
+                        <input type="text" id="bookingTitle" required placeholder="e.g. POS Install - Restaurant Name">
+                    </div>
+
+                    <div class="form-row">
+                        <label>Type</label>
+                        <select id="bookingType">
+                            <option value="install">Install</option>
+                            <option value="training">Training</option>
+                            <option value="onboarding">Onboarding</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Start *</label>
+                            <input type="datetime-local" id="bookingStart" required>
+                        </div>
+                        <div class="form-row">
+                            <label>End *</label>
+                            <input type="datetime-local" id="bookingEnd" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Assigned To *</label>
+                        <select id="bookingUser" required></select>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Company Name</label>
+                        <input type="text" id="bookingCompany" placeholder="Auto-filled from HubSpot deal">
+                    </div>
+
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Contact Name</label>
+                            <input type="text" id="bookingContactName">
+                        </div>
+                        <div class="form-row">
+                            <label>Contact Email</label>
+                            <input type="email" id="bookingContactEmail">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Contact Phone</label>
+                        <input type="tel" id="bookingContactPhone">
+                    </div>
+
+                    <div class="form-row">
+                        <label>Address</label>
+                        <input type="text" id="bookingAddress">
+                    </div>
+
+                    <div class="form-row">
+                        <label>Notes</label>
+                        <textarea id="bookingNotes" placeholder="Any additional notes about the deployment..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-danger" id="deleteBtn" style="display:none" onclick="deleteBooking()">Delete</button>
+                <button class="btn btn-primary" onclick="saveBooking()">Save Booking</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Booking Modal -->
+    <div class="modal-overlay" id="viewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="viewTitle">Booking Details</h2>
+                <button class="modal-close" onclick="closeViewModal()">&times;</button>
+            </div>
+            <div class="modal-body booking-detail" id="viewBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeViewModal()">Close</button>
+                <a class="btn btn-success btn-sm" id="viewIcsLink" href="#" target="_blank">Download .ics</a>
+                <button class="btn btn-primary btn-sm" id="viewSendInvite" onclick="sendInvite()">Send Invite</button>
+                <button class="btn btn-primary" onclick="editFromView()">Edit</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+    <script>
+        let calendar;
+        let allUsers = [];
+        let allDeals = [];
+        let selectedUserIds = new Set();
+        let currentViewBooking = null;
+
+        // ── Init ──
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadUsers();
+            initCalendar();
+            loadDeals();
+        });
+
+        async function loadUsers() {
+            const res = await fetch("/api/users");
+            allUsers = await res.json();
+            renderUserFilters();
+            populateUserSelect();
+        }
+
+        async function loadDeals() {
+            try {
+                const res = await fetch("/api/hubspot/deals");
+                if (res.ok) allDeals = await res.json();
+            } catch (e) {
+                console.log("HubSpot not configured or unavailable");
+            }
+        }
+
+        function renderUserFilters() {
+            const el = document.getElementById("userFilters");
+            el.innerHTML = allUsers.map(u => `
+                <div class="user-chip active" data-uid="${u.id}" onclick="toggleUser('${u.id}', this)">
+                    <div class="dot" style="background:${u.color}"></div>
+                    <div class="name">${u.name}</div>
+                </div>
+            `).join("");
+            selectedUserIds = new Set(allUsers.map(u => u.id));
+        }
+
+        function populateUserSelect() {
+            const sel = document.getElementById("bookingUser");
+            sel.innerHTML = allUsers.map(u =>
+                `<option value="${u.id}">${u.name}</option>`
+            ).join("");
+        }
+
+        function toggleUser(uid, chip) {
+            if (selectedUserIds.has(uid)) {
+                selectedUserIds.delete(uid);
+                chip.classList.remove("active");
+            } else {
+                selectedUserIds.add(uid);
+                chip.classList.add("active");
+            }
+            calendar.refetchEvents();
+        }
+
+        // ── Calendar ──
+
+        function initCalendar() {
+            const el = document.getElementById("calendar");
+            calendar = new FullCalendar.Calendar(el, {
+                initialView: "timeGridWeek",
+                headerToolbar: {
+                    left: "prev,next today",
+                    center: "title",
+                    right: "dayGridMonth,timeGridWeek,timeGridDay",
+                },
+                slotMinTime: "06:00:00",
+                slotMaxTime: "21:00:00",
+                allDaySlot: false,
+                selectable: true,
+                selectMirror: true,
+                nowIndicator: true,
+                eventClick: (info) => viewBooking(info.event),
+                select: (info) => openNewBooking(info.start, info.end),
+                events: fetchEvents,
+                eventDidMount: (info) => {
+                    const type = info.event.extendedProps.booking_type;
+                    if (type === "training") {
+                        info.el.style.borderLeft = "3px solid #d97706";
+                    } else if (type === "onboarding") {
+                        info.el.style.borderLeft = "3px solid #16a34a";
+                    }
+                },
+                height: "100%",
+            });
+            calendar.render();
+        }
+
+        async function fetchEvents(info, successCallback, failureCallback) {
+            try {
+                const typeFilter = document.getElementById("typeFilter").value;
+                let url = `/api/bookings?start=${info.startStr}&end=${info.endStr}`;
+                const res = await fetch(url);
+                let bookings = await res.json();
+
+                // Apply client-side filters
+                if (selectedUserIds.size < allUsers.length) {
+                    bookings = bookings.filter(b => selectedUserIds.has(b.user_id));
+                }
+                if (typeFilter) {
+                    bookings = bookings.filter(b => b.booking_type === typeFilter);
+                }
+
+                const events = bookings.map(b => ({
+                    id: b.id,
+                    title: b.title,
+                    start: b.start_datetime,
+                    end: b.end_datetime,
+                    backgroundColor: b.user_color || "#3788d8",
+                    borderColor: b.user_color || "#3788d8",
+                    extendedProps: b,
+                }));
+                successCallback(events);
+                updateUpcoming(bookings);
+            } catch (e) {
+                failureCallback(e);
+            }
+        }
+
+        document.getElementById("typeFilter").addEventListener("change", () => calendar.refetchEvents());
+
+        function updateUpcoming(bookings) {
+            const now = new Date().toISOString();
+            const upcoming = bookings
+                .filter(b => b.start_datetime >= now)
+                .sort((a, b) => a.start_datetime.localeCompare(b.start_datetime))
+                .slice(0, 8);
+
+            const el = document.getElementById("upcomingList");
+            if (!upcoming.length) {
+                el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0;">No upcoming bookings in view</div>';
+                return;
+            }
+            el.innerHTML = upcoming.map(b => {
+                const d = new Date(b.start_datetime);
+                const typeClass = b.booking_type === "install" ? "badge-install" : b.booking_type === "training" ? "badge-training" : "badge-onboarding";
+                return `
+                    <div class="deal-item" onclick="viewBookingById('${b.id}')">
+                        <div class="deal-name">${b.title}</div>
+                        <div class="deal-stage">
+                            ${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                            &middot; ${b.user_name || ''}
+                        </div>
+                        <span class="badge ${typeClass}">${b.booking_type}</span>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        // ── Deal Search ──
+
+        function searchDeals(query) {
+            const list = document.getElementById("dealList");
+            if (!query || query.length < 2) { list.style.display = "none"; return; }
+
+            const filtered = allDeals.filter(d =>
+                d.name.toLowerCase().includes(query.toLowerCase())
+            );
+            if (!filtered.length) {
+                list.innerHTML = '<div style="padding:8px;color:var(--text-muted);font-size:13px;">No matching deals</div>';
+                list.style.display = "block";
+                return;
+            }
+
+            list.innerHTML = filtered.map(d => `
+                <div class="deal-item" onclick="selectDeal('${d.id}')">
+                    <div class="deal-name">${d.name}</div>
+                    <div class="deal-stage">${d.stage}</div>
+                </div>
+            `).join("");
+            list.style.display = "block";
+        }
+
+        async function selectDeal(dealId) {
+            document.getElementById("selectedDealId").value = dealId;
+            document.getElementById("dealList").style.display = "none";
+
+            const deal = allDeals.find(d => d.id === dealId);
+            if (deal) {
+                document.getElementById("bookingTitle").value = `${deal.stage} - ${deal.name}`;
+                document.getElementById("selectedDealInfo").innerHTML = `
+                    <div class="deal-item selected">
+                        <div class="deal-name">${deal.name}</div>
+                        <div class="deal-stage">${deal.stage}</div>
+                    </div>
+                `;
+
+                if (deal.stage.includes("Training")) {
+                    document.getElementById("bookingType").value = "training";
+                } else if (deal.stage.includes("Onboarding")) {
+                    document.getElementById("bookingType").value = "onboarding";
+                } else {
+                    document.getElementById("bookingType").value = "install";
+                }
+            }
+
+            // Fetch company and contacts from HubSpot
+            try {
+                const [companyRes, contactsRes] = await Promise.all([
+                    fetch(`/api/hubspot/deals/${dealId}/company`),
+                    fetch(`/api/hubspot/deals/${dealId}/contacts`),
+                ]);
+                if (companyRes.ok) {
+                    const company = await companyRes.json();
+                    if (company) {
+                        document.getElementById("bookingCompany").value = company.name || "";
+                        const addr = [company.address, company.city, company.state, company.zip].filter(Boolean).join(", ");
+                        document.getElementById("bookingAddress").value = addr;
+                    }
+                }
+                if (contactsRes.ok) {
+                    const contacts = await contactsRes.json();
+                    if (contacts.length) {
+                        document.getElementById("bookingContactName").value = contacts[0].name || "";
+                        document.getElementById("bookingContactEmail").value = contacts[0].email || "";
+                        document.getElementById("bookingContactPhone").value = contacts[0].phone || "";
+                    }
+                }
+            } catch (e) {
+                console.log("Could not fetch deal associations", e);
+            }
+        }
+
+        // ── Booking CRUD ──
+
+        function openNewBooking(start, end) {
+            document.getElementById("modalTitle").textContent = "New Booking";
+            document.getElementById("bookingForm").reset();
+            document.getElementById("bookingId").value = "";
+            document.getElementById("selectedDealId").value = "";
+            document.getElementById("selectedDealInfo").innerHTML = "";
+            document.getElementById("dealList").style.display = "none";
+            document.getElementById("deleteBtn").style.display = "none";
+
+            if (start) {
+                document.getElementById("bookingStart").value = toLocalInput(start);
+                document.getElementById("bookingEnd").value = toLocalInput(end || new Date(start.getTime() + 2 * 3600000));
+            }
+
+            document.getElementById("bookingModal").classList.add("open");
+        }
+
+        function toLocalInput(date) {
+            const d = new Date(date);
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            return d.toISOString().slice(0, 16);
+        }
+
+        function closeModal() {
+            document.getElementById("bookingModal").classList.remove("open");
+            calendar.unselect();
+        }
+
+        async function saveBooking() {
+            const id = document.getElementById("bookingId").value;
+            const data = {
+                title: document.getElementById("bookingTitle").value,
+                booking_type: document.getElementById("bookingType").value,
+                start_datetime: document.getElementById("bookingStart").value,
+                end_datetime: document.getElementById("bookingEnd").value,
+                user_id: document.getElementById("bookingUser").value,
+                company_name: document.getElementById("bookingCompany").value,
+                hubspot_deal_id: document.getElementById("selectedDealId").value || null,
+                contact_name: document.getElementById("bookingContactName").value,
+                contact_email: document.getElementById("bookingContactEmail").value,
+                contact_phone: document.getElementById("bookingContactPhone").value,
+                address: document.getElementById("bookingAddress").value,
+                notes: document.getElementById("bookingNotes").value,
+            };
+
+            if (!data.title || !data.start_datetime || !data.end_datetime || !data.user_id) {
+                alert("Please fill in all required fields.");
+                return;
+            }
+
+            const url = id ? `/api/bookings/${id}` : "/api/bookings";
+            const method = id ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+
+            if (res.ok) {
+                closeModal();
+                calendar.refetchEvents();
+            } else {
+                alert("Failed to save booking.");
+            }
+        }
+
+        async function deleteBooking() {
+            const id = document.getElementById("bookingId").value;
+            if (!id || !confirm("Delete this booking?")) return;
+
+            const res = await fetch(`/api/bookings/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                closeModal();
+                calendar.refetchEvents();
+            }
+        }
+
+        // ── View Booking ──
+
+        function viewBooking(event) {
+            const b = event.extendedProps;
+            currentViewBooking = b;
+            showViewModal(b);
+        }
+
+        async function viewBookingById(id) {
+            const res = await fetch(`/api/bookings?start=2000-01-01&end=2100-01-01`);
+            const bookings = await res.json();
+            const b = bookings.find(x => x.id === id);
+            if (b) {
+                currentViewBooking = b;
+                showViewModal(b);
+            }
+        }
+
+        function showViewModal(b) {
+            const start = new Date(b.start_datetime);
+            const end = new Date(b.end_datetime);
+            const typeClass = b.booking_type === "install" ? "badge-install" : b.booking_type === "training" ? "badge-training" : "badge-onboarding";
+
+            document.getElementById("viewTitle").textContent = b.title;
+            document.getElementById("viewIcsLink").href = `/api/bookings/${b.id}/ics`;
+
+            document.getElementById("viewBody").innerHTML = `
+                <div class="field">
+                    <div class="field-label">Type</div>
+                    <div class="field-value"><span class="badge ${typeClass}">${b.booking_type}</span></div>
+                </div>
+                <div class="field">
+                    <div class="field-label">Date & Time</div>
+                    <div class="field-value">${start.toLocaleDateString()} ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                </div>
+                <div class="field">
+                    <div class="field-label">Assigned To</div>
+                    <div class="field-value">${b.user_name || 'Unassigned'}</div>
+                </div>
+                ${b.company_name ? `<div class="field"><div class="field-label">Company</div><div class="field-value">${b.company_name}</div></div>` : ''}
+                ${b.contact_name ? `<div class="field"><div class="field-label">Contact</div><div class="field-value">${b.contact_name}${b.contact_email ? ' &middot; ' + b.contact_email : ''}${b.contact_phone ? ' &middot; ' + b.contact_phone : ''}</div></div>` : ''}
+                ${b.address ? `<div class="field"><div class="field-label">Address</div><div class="field-value">${b.address}</div></div>` : ''}
+                ${b.notes ? `<div class="field"><div class="field-label">Notes</div><div class="field-value">${b.notes}</div></div>` : ''}
+                ${b.hubspot_deal_id ? `<div class="field"><div class="field-label">HubSpot Deal</div><div class="field-value"><a href="https://app.hubspot.com/contacts/deals/${b.hubspot_deal_id}" target="_blank">View in HubSpot</a></div></div>` : ''}
+            `;
+            document.getElementById("viewModal").classList.add("open");
+        }
+
+        function closeViewModal() {
+            document.getElementById("viewModal").classList.remove("open");
+            currentViewBooking = null;
+        }
+
+        function editFromView() {
+            const b = currentViewBooking;
+            closeViewModal();
+
+            document.getElementById("modalTitle").textContent = "Edit Booking";
+            document.getElementById("bookingId").value = b.id;
+            document.getElementById("bookingTitle").value = b.title;
+            document.getElementById("bookingType").value = b.booking_type;
+            document.getElementById("bookingStart").value = b.start_datetime.slice(0, 16);
+            document.getElementById("bookingEnd").value = b.end_datetime.slice(0, 16);
+            document.getElementById("bookingUser").value = b.user_id;
+            document.getElementById("bookingCompany").value = b.company_name || "";
+            document.getElementById("selectedDealId").value = b.hubspot_deal_id || "";
+            document.getElementById("bookingContactName").value = b.contact_name || "";
+            document.getElementById("bookingContactEmail").value = b.contact_email || "";
+            document.getElementById("bookingContactPhone").value = b.contact_phone || "";
+            document.getElementById("bookingAddress").value = b.address || "";
+            document.getElementById("bookingNotes").value = b.notes || "";
+            document.getElementById("deleteBtn").style.display = "block";
+
+            document.getElementById("bookingModal").classList.add("open");
+        }
+
+        async function sendInvite() {
+            const b = currentViewBooking;
+            if (!b) return;
+            const email = b.contact_email || prompt("Enter email address:");
+            if (!email) return;
+
+            const res = await fetch(`/api/bookings/${b.id}/send-invite`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            if (data.ics_url) {
+                alert("SMTP not configured. Downloading ICS file instead.");
+                window.open(data.ics_url, "_blank");
+            } else {
+                alert(data.message || data.error);
+            }
+        }
+    </script>
+</body>
+</html>

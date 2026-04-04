@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - POSUP Deployment Bookings</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+
+        .top-bar {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .top-bar h1 { font-size: 20px; font-weight: 700; }
+        .top-bar h1 span { color: var(--primary); }
+        .top-bar nav a {
+            margin-left: 16px;
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .top-bar nav a:hover { color: var(--primary); }
+        .top-bar nav a.active { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 2px; }
+
+        .container { max-width: 960px; margin: 24px auto; padding: 0 24px; }
+
+        .section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        .section-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header h2 { font-size: 16px; }
+        .section-body { padding: 20px; }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        .form-row { margin-bottom: 14px; }
+        .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+        .form-row input, .form-row select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .form-inline { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .form-inline .form-row { flex: 1; min-width: 150px; margin-bottom: 0; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); background: var(--bg); }
+        tr:last-child td { border-bottom: none; }
+
+        .color-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: middle; }
+        .role-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #ede9fe; color: #5b21b6; }
+
+        /* Availability Grid */
+        .avail-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+        .avail-day {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+            font-size: 13px;
+        }
+        .avail-day .day-name { font-weight: 700; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; color: var(--text-muted); }
+        .avail-day input { width: 100%; font-size: 12px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; text-align: center; margin-bottom: 4px; }
+        .avail-day .avail-label { font-size: 11px; color: var(--text-muted); }
+
+        .time-off-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+
+        .tab-bar { display: flex; border-bottom: 1px solid var(--border); }
+        .tab {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--card);
+            border-radius: 12px;
+            width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 18px; }
+        .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); }
+        .modal-body { padding: 20px; }
+        .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+        .empty-state {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .config-field {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .config-field:last-child { border-bottom: none; }
+        .config-field label { min-width: 160px; font-size: 13px; font-weight: 600; }
+        .config-field input { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+        .config-field .hint { font-size: 11px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1><span>POSUP</span> Admin</h1>
+        <nav>
+            <a href="/">Calendar</a>
+            <a href="/admin" class="active">Admin</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <div class="tab-bar">
+            <div class="tab active" onclick="switchTab('users')">Team Members</div>
+            <div class="tab" onclick="switchTab('availability')">Availability</div>
+            <div class="tab" onclick="switchTab('timeoff')">Time Off</div>
+        </div>
+
+        <!-- USERS TAB -->
+        <div class="tab-content active" id="tab-users">
+            <div class="section">
+                <div class="section-header">
+                    <h2>Team Members</h2>
+                    <button class="btn btn-primary btn-sm" onclick="openUserModal()">+ Add Member</button>
+                </div>
+                <div class="section-body" style="padding:0;">
+                    <table>
+                        <thead>
+                            <tr><th>Color</th><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- AVAILABILITY TAB -->
+        <div class="tab-content" id="tab-availability">
+            <div class="section">
+                <div class="section-header">
+                    <h2>Set Weekly Availability</h2>
+                </div>
+                <div class="section-body">
+                    <div class="form-row" style="max-width:300px;margin-bottom:16px;">
+                        <label>Select Team Member</label>
+                        <select id="availUser" onchange="loadAvailability()"></select>
+                    </div>
+                    <div class="avail-grid" id="availGrid"></div>
+                    <div style="margin-top:16px;text-align:right;">
+                        <button class="btn btn-primary" onclick="saveAvailability()">Save Availability</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TIME OFF TAB -->
+        <div class="tab-content" id="tab-timeoff">
+            <div class="section">
+                <div class="section-header">
+                    <h2>Time Off / Blocked Dates</h2>
+                </div>
+                <div class="section-body">
+                    <div class="form-row" style="max-width:300px;margin-bottom:16px;">
+                        <label>Select Team Member</label>
+                        <select id="timeoffUser" onchange="loadTimeOff()"></select>
+                    </div>
+                    <div class="form-inline" style="margin-bottom:16px;">
+                        <div class="form-row">
+                            <label>Start Date</label>
+                            <input type="date" id="timeoffStart">
+                        </div>
+                        <div class="form-row">
+                            <label>End Date</label>
+                            <input type="date" id="timeoffEnd">
+                        </div>
+                        <div class="form-row">
+                            <label>Reason</label>
+                            <input type="text" id="timeoffReason" placeholder="Optional">
+                        </div>
+                        <button class="btn btn-primary" onclick="addTimeOff()" style="height:36px;">Add</button>
+                    </div>
+                    <div id="timeoffList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    <div class="modal-overlay" id="userModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="userModalTitle">Add Team Member</h2>
+                <button class="modal-close" onclick="closeUserModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editUserId">
+                <div class="form-row">
+                    <label>Name *</label>
+                    <input type="text" id="userName" required>
+                </div>
+                <div class="form-row">
+                    <label>Email *</label>
+                    <input type="email" id="userEmail" required>
+                </div>
+                <div class="form-row">
+                    <label>Role</label>
+                    <select id="userRole">
+                        <option value="installer">Installer</option>
+                        <option value="trainer">Trainer</option>
+                        <option value="lead">Lead</option>
+                        <option value="manager">Manager</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Calendar Color</label>
+                    <input type="color" id="userColor" value="#3788d8">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeUserModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveUser()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let users = [];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            loadUsers();
+        });
+
+        // ── Tabs ──
+
+        function switchTab(name) {
+            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
+            document.getElementById(`tab-${name}`).classList.add("active");
+            event.target.classList.add("active");
+
+            if (name === "availability") loadAvailability();
+            if (name === "timeoff") loadTimeOff();
+        }
+
+        // ── Users ──
+
+        async function loadUsers() {
+            const res = await fetch("/api/users");
+            users = await res.json();
+            renderUsersTable();
+            populateSelects();
+        }
+
+        function renderUsersTable() {
+            const tbody = document.getElementById("usersTableBody");
+            if (!users.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No team members yet. Add your first member above.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = users.map(u => `
+                <tr>
+                    <td><span class="color-dot" style="background:${u.color}"></span></td>
+                    <td>${u.name}</td>
+                    <td>${u.email}</td>
+                    <td><span class="role-badge">${u.role}</span></td>
+                    <td>
+                        <button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="removeUser('${u.id}')">Remove</button>
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        function populateSelects() {
+            const opts = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
+            document.getElementById("availUser").innerHTML = opts;
+            document.getElementById("timeoffUser").innerHTML = opts;
+        }
+
+        function openUserModal(userId) {
+            const modal = document.getElementById("userModal");
+            if (userId) {
+                const u = users.find(x => x.id === userId);
+                document.getElementById("userModalTitle").textContent = "Edit Team Member";
+                document.getElementById("editUserId").value = u.id;
+                document.getElementById("userName").value = u.name;
+                document.getElementById("userEmail").value = u.email;
+                document.getElementById("userRole").value = u.role;
+                document.getElementById("userColor").value = u.color;
+            } else {
+                document.getElementById("userModalTitle").textContent = "Add Team Member";
+                document.getElementById("editUserId").value = "";
+                document.getElementById("userName").value = "";
+                document.getElementById("userEmail").value = "";
+                document.getElementById("userRole").value = "installer";
+                document.getElementById("userColor").value = "#3788d8";
+            }
+            modal.classList.add("open");
+        }
+
+        function closeUserModal() {
+            document.getElementById("userModal").classList.remove("open");
+        }
+
+        function editUser(id) {
+            openUserModal(id);
+        }
+
+        async function saveUser() {
+            const id = document.getElementById("editUserId").value;
+            const data = {
+                name: document.getElementById("userName").value,
+                email: document.getElementById("userEmail").value,
+                role: document.getElementById("userRole").value,
+                color: document.getElementById("userColor").value,
+            };
+            if (!data.name || !data.email) {
+                alert("Name and email are required.");
+                return;
+            }
+
+            const url = id ? `/api/users/${id}` : "/api/users";
+            const method = id ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+
+            if (res.ok) {
+                closeUserModal();
+                loadUsers();
+            } else {
+                alert("Failed to save user.");
+            }
+        }
+
+        async function removeUser(id) {
+            if (!confirm("Remove this team member?")) return;
+            await fetch(`/api/users/${id}`, { method: "DELETE" });
+            loadUsers();
+        }
+
+        // ── Availability ──
+
+        const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+        async function loadAvailability() {
+            const uid = document.getElementById("availUser").value;
+            if (!uid) return;
+
+            const res = await fetch(`/api/users/${uid}/availability`);
+            const avail = await res.json();
+
+            const grid = document.getElementById("availGrid");
+            grid.innerHTML = DAYS.map((day, i) => {
+                const slot = avail.find(a => a.day_of_week === i);
+                return `
+                    <div class="avail-day">
+                        <div class="day-name">${day.slice(0, 3)}</div>
+                        <div class="avail-label">Start</div>
+                        <input type="time" id="avail-start-${i}" value="${slot ? slot.start_time : '09:00'}">
+                        <div class="avail-label">End</div>
+                        <input type="time" id="avail-end-${i}" value="${slot ? slot.end_time : '17:00'}">
+                        <label style="margin-top:6px;font-size:12px;">
+                            <input type="checkbox" id="avail-active-${i}" ${slot || i < 5 ? 'checked' : ''}>
+                            Available
+                        </label>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        async function saveAvailability() {
+            const uid = document.getElementById("availUser").value;
+            if (!uid) return;
+
+            const slots = [];
+            for (let i = 0; i < 7; i++) {
+                const active = document.getElementById(`avail-active-${i}`).checked;
+                if (active) {
+                    slots.push({
+                        day_of_week: i,
+                        start_time: document.getElementById(`avail-start-${i}`).value,
+                        end_time: document.getElementById(`avail-end-${i}`).value,
+                    });
+                }
+            }
+
+            const res = await fetch(`/api/users/${uid}/availability`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(slots),
+            });
+
+            if (res.ok) {
+                alert("Availability saved!");
+            } else {
+                alert("Failed to save availability.");
+            }
+        }
+
+        // ── Time Off ──
+
+        async function loadTimeOff() {
+            const uid = document.getElementById("timeoffUser").value;
+            if (!uid) return;
+
+            const res = await fetch(`/api/users/${uid}/timeoff`);
+            const items = await res.json();
+
+            const el = document.getElementById("timeoffList");
+            if (!items.length) {
+                el.innerHTML = '<div class="empty-state">No time off scheduled.</div>';
+                return;
+            }
+            el.innerHTML = items.map(t => `
+                <div class="time-off-item">
+                    <div>
+                        <strong>${t.start_date} to ${t.end_date}</strong>
+                        ${t.reason ? ` &mdash; ${t.reason}` : ''}
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="removeTimeOff('${t.user_id}', '${t.id}')">Remove</button>
+                </div>
+            `).join("");
+        }
+
+        async function addTimeOff() {
+            const uid = document.getElementById("timeoffUser").value;
+            if (!uid) return;
+
+            const data = {
+                start_date: document.getElementById("timeoffStart").value,
+                end_date: document.getElementById("timeoffEnd").value,
+                reason: document.getElementById("timeoffReason").value,
+            };
+            if (!data.start_date || !data.end_date) {
+                alert("Start and end dates are required.");
+                return;
+            }
+
+            const res = await fetch(`/api/users/${uid}/timeoff`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+
+            if (res.ok) {
+                document.getElementById("timeoffStart").value = "";
+                document.getElementById("timeoffEnd").value = "";
+                document.getElementById("timeoffReason").value = "";
+                loadTimeOff();
+            }
+        }
+
+        async function removeTimeOff(uid, tid) {
+            await fetch(`/api/users/${uid}/timeoff/${tid}`, { method: "DELETE" });
+            loadTimeOff();
+        }
+
+        // Init availability grid on load
+        setTimeout(() => { if (users.length) loadAvailability(); }, 500);
+    </script>
+</body>
+</html>
