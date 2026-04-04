@@ -81,6 +81,8 @@
         .badge-install { background: #dbeafe; color: #1d4ed8; }
         .badge-training { background: #fef3c7; color: #92400e; }
         .badge-onboarding { background: #d1fae5; color: #065f46; }
+        .badge-confirmed { background: #d1fae5; color: #065f46; }
+        .badge-cancelled { background: #fee2e2; color: #991b1b; }
 
         .user-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 
@@ -162,6 +164,7 @@
                 <button class="btn btn-ghost" onclick="closeModal()">Close</button>
                 <a class="btn btn-success btn-sm" id="viewIcsLink" href="#" target="_blank">Download .ics</a>
                 <button class="btn btn-primary btn-sm" onclick="sendInvite()">Send Invite</button>
+                <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel Booking</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
             </div>
         </div>
@@ -259,6 +262,7 @@
                             <th>Type</th>
                             <th>Assigned To</th>
                             <th>Company</th>
+                            <th>Status</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -276,6 +280,7 @@
                                     <td><span class="badge ${typeClass}">${b.booking_type}</span></td>
                                     <td><span class="user-dot" style="background:${b.user_color || '#3788d8'}"></span>${b.user_name || ''}</td>
                                     <td>${b.company_name || '-'}</td>
+                                    <td><span class="badge badge-${b.status || 'confirmed'}">${b.status || 'confirmed'}</span></td>
                                     <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking('${b.id}')">View</button></td>
                                 </tr>`;
                         }).join("")}
@@ -292,8 +297,10 @@
             const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
             document.getElementById("viewTitle").textContent = b.title;
             document.getElementById("viewIcsLink").href = `/api/bookings/${b.id}/ics`;
+            const statusClass = b.status === 'cancelled' ? 'badge-cancelled' : 'badge-confirmed';
+            document.getElementById("cancelBtn").style.display = b.status === 'cancelled' ? 'none' : '';
             document.getElementById("viewBody").innerHTML = `
-                <div class="field"><div class="field-label">Type</div><div class="field-value"><span class="badge ${typeClass}">${b.booking_type}</span></div></div>
+                <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${b.status || 'confirmed'}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
                 <div class="field"><div class="field-label">Assigned To</div><div class="field-value"><span class="user-dot" style="background:${b.user_color || '#3788d8'}"></span>${b.user_name || 'Unassigned'}</div></div>
                 ${b.company_name ? `<div class="field"><div class="field-label">Company</div><div class="field-value">${b.company_name}</div></div>` : ''}
@@ -310,8 +317,30 @@
             currentBooking = null;
         }
 
+        async function cancelBooking() {
+            if (!currentBooking || !confirm("Cancel this booking?")) return;
+            const b = currentBooking;
+            const res = await fetch(`/api/bookings/${b.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: b.title, booking_type: b.booking_type,
+                    start_datetime: b.start_datetime, end_datetime: b.end_datetime,
+                    user_id: b.user_id, company_name: b.company_name,
+                    hubspot_deal_id: b.hubspot_deal_id, hubspot_company_id: b.hubspot_company_id,
+                    deal_stage: b.deal_stage, contact_name: b.contact_name,
+                    contact_email: b.contact_email, contact_phone: b.contact_phone,
+                    address: b.address, notes: b.notes, status: "cancelled"
+                }),
+            });
+            if (res.ok) {
+                closeModal();
+                loadBookings();
+            }
+        }
+
         async function deleteBooking() {
-            if (!currentBooking || !confirm("Delete this booking?")) return;
+            if (!currentBooking || !confirm("Permanently delete this booking?")) return;
             const res = await fetch(`/api/bookings/${currentBooking.id}`, { method: "DELETE" });
             if (res.ok) {
                 closeModal();
