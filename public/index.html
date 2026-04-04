@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POSUP Deployment Bookings</title>
+    <title>Deployment Bookings</title>
     <style>
         :root {
             --primary: #ff5c35;
@@ -105,11 +105,6 @@
         .cal-grid .day.has-bookings { position: relative; }
         .cal-grid .day.has-bookings::after { content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
 
-        /* ── Assigned user filter in cal panel ── */
-        .user-filter { margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
-        .user-filter h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.5); margin-bottom: 8px; }
-        .user-filter select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: #fff; font-size: 13px; }
-        .user-filter select option { color: #333; }
 
         /* ── Right panel ── */
         .right-panel { flex: 1; padding: 30px; overflow-y: auto; }
@@ -223,7 +218,7 @@
 </head>
 <body>
     <div class="top-bar">
-        <h1><span>POSUP</span> Deployment Bookings <span class="version-badge" id="versionBadge"></span></h1>
+        <h1><img src="/aio-logo.png" alt="AIO" style="height:28px;vertical-align:middle;margin-right:8px;filter:brightness(0) invert(1);">Deployment Bookings <span class="version-badge" id="versionBadge"></span></h1>
         <nav>
             <a href="/" class="active">Calendar</a>
             <a href="/admin">Admin</a>
@@ -254,12 +249,7 @@
                     </div>
                     <div class="cal-grid" id="calGrid"></div>
 
-                    <div class="user-filter">
-                        <h4>Filter by Team Member</h4>
-                        <select id="userSelect" onchange="onUserChange()">
-                            <option value="">All Team Members</option>
-                        </select>
-                    </div>
+                    <select id="userSelect" class="hidden"></select>
                 </div>
                 <div class="right-panel">
                     <h3>Select a Start Time</h3>
