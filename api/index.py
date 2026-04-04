@@ -13,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.4.2"
+VERSION = "2.4.3"
 
 app = Flask(__name__)
 
@@ -706,21 +706,23 @@ def create_booking():
                 f"<b>Deployment Booked - {formatted_date}</b><br>"
                 f"<b>Deployment Specialist - {specialist}</b>"
             )
-            # Create note associated with the deal
-            note_resp = hubspot_request("POST", "/crm/v3/objects/notes", {
+            # Post note to the deal
+            hubspot_request("POST", "/crm/v3/objects/notes", {
                 "properties": {"hs_note_body": note_body, "hs_timestamp": datetime.utcnow().isoformat() + "Z"},
                 "associations": [{
                     "to": {"id": int(data["hubspot_deal_id"])},
                     "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}],
                 }],
             })
-            # Associate note with company separately
-            if data.get("hubspot_company_id") and note_resp.get("id"):
-                try:
-                    hubspot_request("PUT",
-                        f"/crm/v3/objects/notes/{note_resp['id']}/associations/companies/{data['hubspot_company_id']}/202")
-                except Exception:
-                    pass
+            # Post note to the company
+            if data.get("hubspot_company_id"):
+                hubspot_request("POST", "/crm/v3/objects/notes", {
+                    "properties": {"hs_note_body": note_body, "hs_timestamp": datetime.utcnow().isoformat() + "Z"},
+                    "associations": [{
+                        "to": {"id": int(data["hubspot_company_id"])},
+                        "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 202}],
+                    }],
+                })
             result["hubspot_note"] = "sent"
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
