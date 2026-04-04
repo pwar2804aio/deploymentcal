@@ -298,19 +298,8 @@
                         <div id="selectedDealInfo" style="margin-top:8px;"></div>
                     </div>
 
-                    <div class="form-row">
-                        <label>Title *</label>
-                        <input type="text" id="bookingTitle" required placeholder="e.g. POS Install - Restaurant Name">
-                    </div>
-
-                    <div class="form-row">
-                        <label>Type</label>
-                        <select id="bookingType">
-                            <option value="install">Install</option>
-                            <option value="training">Training</option>
-                            <option value="onboarding">Onboarding</option>
-                        </select>
-                    </div>
+                    <input type="hidden" id="bookingTitle">
+                    <input type="hidden" id="bookingType" value="install">
 
                     <input type="hidden" id="bookingUser">
                     <div id="step2AssignedInfo" class="assigned-info" style="margin-bottom:14px;">
@@ -686,13 +675,9 @@
             document.getElementById("dealList").style.display = "none";
             const deal = allDeals.find(d => d.id === dealId);
             if (deal) {
-                document.getElementById("bookingTitle").value = `${deal.stage} - ${deal.name}`;
                 document.getElementById("selectedDealInfo").innerHTML = `
                     <div class="deal-item selected"><div class="deal-name">${deal.name}</div><div class="deal-stage">${deal.stage}</div></div>
                 `;
-                if (deal.stage.includes("Training")) document.getElementById("bookingType").value = "training";
-                else if (deal.stage.includes("Onboarding")) document.getElementById("bookingType").value = "onboarding";
-                else document.getElementById("bookingType").value = "install";
             }
             try {
                 const [companyRes, contactsRes] = await Promise.all([
@@ -705,6 +690,7 @@
                         document.getElementById("bookingCompany").value = company.name || "";
                         document.getElementById("bookingAddress").value = [company.address, company.city, company.state, company.zip].filter(Boolean).join(", ");
                         document.getElementById("selectedCompanyId").value = company.id || "";
+                        document.getElementById("bookingTitle").value = `Deployment - ${company.name || ""}`;
                     }
                 }
                 if (contactsRes.ok) {
@@ -738,8 +724,9 @@
                 notes: document.getElementById("bookingNotes").value,
             };
 
-            if (!data.title || !data.user_id) {
-                alert("Please fill in a title.");
+            if (!data.title) data.title = "Deployment";
+            if (!data.user_id) {
+                alert("No team member assigned.");
                 return;
             }
 
