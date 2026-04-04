@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "1.9.0"
+VERSION = "2.0.0"
 
 app = Flask(__name__)
 
@@ -505,15 +505,16 @@ def create_booking():
             cur2.execute("SELECT name FROM users WHERE id = %s", (data["user_id"],))
             user = dict_one(cur2)
             cur2.close()
+            # Format the date nicely
+            try:
+                dt = datetime.fromisoformat(data['start_datetime'])
+                formatted_date = dt.strftime('%A %d %B %Y')
+            except Exception:
+                formatted_date = data['start_datetime']
+            specialist = user['name'] if user else 'Unknown'
             note_body = (
-                f"Deployment booking created\n"
-                f"Type: {data.get('booking_type', 'install').title()}\n"
-                f"Date: {data['start_datetime']} - {data['end_datetime']}\n"
-                f"Assigned to: {user['name'] if user else 'Unknown'}\n"
-                f"Company: {data.get('company_name', 'N/A')}\n"
-                f"Contact: {data.get('contact_name', 'N/A')} ({data.get('contact_email', 'N/A')})\n"
-                f"Address: {data.get('address', 'N/A')}\n"
-                f"Notes: {data.get('notes', 'N/A')}"
+                f"<b>Deployment Booked - {formatted_date}</b><br>"
+                f"<b>Deployment Specialist - {specialist}</b>"
             )
             associations = [{
                 "to": {"id": int(data["hubspot_deal_id"])},
