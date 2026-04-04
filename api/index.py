@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 
 app = Flask(__name__)
 
@@ -350,6 +350,23 @@ def delete_timeoff(uid, tid):
 
 # ── Round Robin Assignment ─────────��─────────────────────────────────────────
 
+@app.route("/api/available-days")
+def available_days():
+    """Return which days of week (0=Mon..6=Sun) have at least one available user."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT DISTINCT a.day_of_week
+        FROM availability a
+        JOIN users u ON u.id = a.user_id
+        WHERE u.active = 1
+        ORDER BY a.day_of_week
+    """)
+    days = [row[0] for row in cur.fetchall()]
+    cur.close()
+    return jsonify({"days": days})
+
+
 @app.route("/api/round-robin")
 def round_robin():
     date_str = request.args.get("date")  # YYYY-MM-DD
@@ -413,7 +430,21 @@ def round_robin():
 
     # Sort by booking count (fewest first)
     available_users.sort(key=lambda u: counts.get(u["id"], 0))
-    return jsonify({"user": available_users[0]})
+    chosen = available_users[0]
+
+    # Get the chosen user's availability hours for this day
+    cur2 = db.cursor()
+    cur2.execute("""
+        SELECT start_time, end_time FROM availability
+        WHERE user_id = %s AND day_of_week = %s
+    """, (chosen["id"], dow))
+    avail_row = cur2.fetchone()
+    cur2.close()
+    if avail_row:
+        chosen["start_time"] = avail_row[0]
+        chosen["end_time"] = avail_row[1]
+
+    return jsonify({"user": chosen})
 
 
 # ── Bookings API ──────────────────────────────────────────────────────────────

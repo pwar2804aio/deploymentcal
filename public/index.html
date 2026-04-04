@@ -257,27 +257,14 @@
                     <div class="sub" id="selectedDateLabel">Select a date on the calendar</div>
 
                     <div id="startTimeArea" class="hidden">
-                        <div class="start-time-area">
+                        <div id="assignedUserInfo" class="hidden"></div>
+
+                        <div class="start-time-area" id="startTimeArea2" class="hidden">
                             <label>Start Time</label>
                             <select class="start-time-select" id="startTimeSelect">
                                 <option value="">Choose a start time...</option>
-                                <option value="07:00">7:00 AM</option>
-                                <option value="08:00">8:00 AM</option>
-                                <option value="09:00">9:00 AM</option>
-                                <option value="10:00">10:00 AM</option>
-                                <option value="11:00">11:00 AM</option>
-                                <option value="12:00">12:00 PM</option>
-                                <option value="13:00">1:00 PM</option>
-                                <option value="14:00">2:00 PM</option>
-                                <option value="15:00">3:00 PM</option>
-                                <option value="16:00">4:00 PM</option>
-                                <option value="17:00">5:00 PM</option>
-                                <option value="18:00">6:00 PM</option>
-                                <option value="19:00">7:00 PM</option>
                             </select>
                         </div>
-
-                        <div id="assignedUserInfo" class="hidden"></div>
 
                         <button type="button" class="btn btn-primary btn-block" id="confirmTimeBtn" onclick="confirmTimeAndProceed()" disabled>Continue to Booking Details</button>
                     </div>
@@ -398,6 +385,7 @@
         let assignedUser = null;
         let selectedUserId = "";
         let existingBookings = [];
+        let availableDays = []; // days of week with available users (0=Mon..6=Sun)
 
         // ── Init ──
         document.addEventListener("DOMContentLoaded", async () => {
@@ -405,11 +393,21 @@
             viewYear = now.getFullYear();
             viewMonth = now.getMonth();
 
-            await loadUsers();
+            await Promise.all([loadUsers(), loadAvailableDays()]);
             renderCalendar();
             loadDeals();
             loadVersion();
         });
+
+        async function loadAvailableDays() {
+            try {
+                const res = await fetch("/api/available-days");
+                const data = await res.json();
+                availableDays = data.days || [];
+            } catch (e) {
+                availableDays = [];
+            }
+        }
 
         async function loadVersion() {
             try {
@@ -471,11 +469,15 @@
                 const isTooSoon = date < minDate;
                 const isToday = date.getTime() === today.getTime();
                 const isSelected = selectedDate && date.getTime() === selectedDate.getTime();
+                // Check if this day of week has any available users (JS: Mon=1..Sun=0 -> convert to 0=Mon..6=Sun)
+                const jsDow = date.getDay(); // 0=Sun..6=Sat
+                const dow = jsDow === 0 ? 6 : jsDow - 1; // convert to 0=Mon..6=Sun
+                const noAvailability = availableDays.length > 0 && !availableDays.includes(dow);
 
                 let cls = "day";
-                if (isTooSoon) cls += " past";
+                if (isTooSoon || noAvailability) cls += " past";
                 if (isToday) cls += " today";
-                if (isSelected) cls += " selected";
+                if (isSelected && !noAvailability) cls += " selected";
 
                 const dateStr = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                 grid.innerHTML += `<div class="${cls}" onclick="selectDate('${dateStr}')" data-date="${dateStr}">${d}</div>`;
@@ -512,9 +514,49 @@
 
             document.getElementById("startTimeArea").classList.remove("hidden");
             document.getElementById("noDateSelected").classList.add("hidden");
-            document.getElementById("startTimeSelect").value = "";
             document.getElementById("confirmTimeBtn").disabled = true;
             document.getElementById("assignedUserInfo").classList.add("hidden");
+            document.getElementById("startTimeSelect").innerHTML = '<option value="">Loading...</option>';
+
+            // Call round-robin to assign a user for this date
+            try {
+                const res = await fetch(`/api/round-robin?date=${dateStr}`);
+                const data = await res.json();
+                if (data.user) {
+                    assignedUser = data.user;
+                    document.getElementById("assignedUserInfo").innerHTML = `
+                        <div class="assigned-info">
+                            <div class="assigned-label">Auto-Assigned To</div>
+                            <div class="assigned-name">
+                                <span class="assigned-dot" style="background:${data.user.color || '#3788d8'}"></span>
+                                ${data.user.name}
+                            </div>
+                        </div>`;
+                    document.getElementById("assignedUserInfo").classList.remove("hidden");
+
+                    // Build start time options from the assigned user's availability hours
+                    const startH = parseInt(data.user.start_time ? data.user.start_time.split(":")[0] : "7");
+                    const endH = parseInt(data.user.end_time ? data.user.end_time.split(":")[0] : "19");
+                    let opts = '<option value="">Choose a start time...</option>';
+                    for (let h = startH; h <= endH; h++) {
+                        const val = `${String(h).padStart(2, '0')}:00`;
+                        const label = h > 12 ? `${h - 12}:00 PM` : h === 12 ? '12:00 PM' : `${h}:00 AM`;
+                        opts += `<option value="${val}">${label}</option>`;
+                    }
+                    document.getElementById("startTimeSelect").innerHTML = opts;
+                } else {
+                    assignedUser = null;
+                    document.getElementById("assignedUserInfo").innerHTML = `
+                        <div class="assigned-info" style="background:#fff3f0;border-color:#ffcfc4;">
+                            <div class="assigned-name" style="color:var(--danger);">No team members available for this date</div>
+                        </div>`;
+                    document.getElementById("assignedUserInfo").classList.remove("hidden");
+                    document.getElementById("startTimeSelect").innerHTML = '<option value="">No times available</option>';
+                }
+            } catch (e) {
+                assignedUser = null;
+                document.getElementById("startTimeSelect").innerHTML = '<option value="">Error loading</option>';
+            }
 
             await loadBookingsForDate(dateStr);
         }
@@ -537,45 +579,14 @@
             renderDayBookings(dateStr);
         }
 
-        // When start time is chosen, call round-robin API
-        document.getElementById("startTimeSelect").addEventListener("change", async function() {
+        // When start time is chosen, enable the continue button
+        document.getElementById("startTimeSelect").addEventListener("change", function() {
             const time = this.value;
-            if (!time || !selectedDate) {
-                document.getElementById("confirmTimeBtn").disabled = true;
-                document.getElementById("assignedUserInfo").classList.add("hidden");
-                assignedUser = null;
-                return;
-            }
-
-            selectedStartTime = time;
-            const dateStr = selectedDate.toISOString().slice(0, 10);
-
-            try {
-                const res = await fetch(`/api/round-robin?date=${dateStr}&start_time=${time}`);
-                const data = await res.json();
-                if (data.user) {
-                    assignedUser = data.user;
-                    document.getElementById("assignedUserInfo").innerHTML = `
-                        <div class="assigned-info">
-                            <div class="assigned-label">Auto-Assigned To</div>
-                            <div class="assigned-name">
-                                <span class="assigned-dot" style="background:${data.user.color || '#3788d8'}"></span>
-                                ${data.user.name}
-                            </div>
-                        </div>`;
-                    document.getElementById("assignedUserInfo").classList.remove("hidden");
-                    document.getElementById("confirmTimeBtn").disabled = false;
-                } else {
-                    assignedUser = null;
-                    document.getElementById("assignedUserInfo").innerHTML = `
-                        <div class="assigned-info" style="background:#fff3f0;border-color:#ffcfc4;">
-                            <div class="assigned-name" style="color:var(--danger);">No team members available for this date</div>
-                        </div>`;
-                    document.getElementById("assignedUserInfo").classList.remove("hidden");
-                    document.getElementById("confirmTimeBtn").disabled = true;
-                }
-            } catch (e) {
-                assignedUser = null;
+            if (time && assignedUser) {
+                selectedStartTime = time;
+                document.getElementById("confirmTimeBtn").disabled = false;
+            } else {
+                selectedStartTime = null;
                 document.getElementById("confirmTimeBtn").disabled = true;
             }
         });
