@@ -13,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 
 app = Flask(__name__)
 
@@ -690,23 +690,16 @@ def create_booking():
 
     result = {"id": bid, "hubspot_note": None, "email_sent": None}
 
+    # Get specialist name for notes and emails
+    cur2 = db.cursor()
+    cur2.execute("SELECT name FROM users WHERE id = %s", (data["user_id"],))
+    user = dict_one(cur2)
+    cur2.close()
+    specialist = user['name'] if user else 'Unknown'
+
     if HUBSPOT_API_KEY and data.get("hubspot_deal_id"):
         try:
-            cur2 = db.cursor()
-            cur2.execute("SELECT name FROM users WHERE id = %s", (data["user_id"],))
-            user = dict_one(cur2)
-            cur2.close()
-            # Format the date nicely
-            try:
-                dt = datetime.fromisoformat(data['start_datetime'])
-                formatted_date = dt.strftime('%A %d %B %Y')
-            except Exception:
-                formatted_date = data['start_datetime']
-            specialist = user['name'] if user else 'Unknown'
-            note_body = (
-                f"<b>Deployment Booked - {formatted_date}</b><br>"
-                f"<b>Deployment Specialist - {specialist}</b>"
-            )
+            note_body, _, _ = build_booking_html(data, specialist)
             # Post note to the deal
             hubspot_request("POST", "/crm/v3/objects/notes", {
                 "properties": {"hs_note_body": note_body, "hs_timestamp": datetime.utcnow().isoformat() + "Z"},
@@ -855,18 +848,11 @@ def format_booking_date(booking_data):
         return booking_data.get('start_datetime', 'TBD'), ''
 
 
-def send_booking_email(booking_id, booking_data, db, cancelled=False):
-    if not SENDGRID_API_KEY:
-        return
-    recipients = get_booking_recipients(booking_data, db)
-    if not recipients:
-        return
-
+def build_booking_html(booking_data, specialist_name, cancelled=False):
     formatted_date, start_time = format_booking_date(booking_data)
     status = "CANCELLED" if cancelled else "Confirmed"
     status_color = "#dc2626" if cancelled else "#16a34a"
-
-    html_body = f"""
+    return f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
         <div style="background: {'#fef2f2' if cancelled else '#f0fdf4'}; border-left: 4px solid {status_color}; padding: 16px; margin-bottom: 20px;">
             <h2 style="margin: 0; color: {status_color};">Deployment {status}</h2>
@@ -877,16 +863,25 @@ def send_booking_email(booking_id, booking_data, db, cancelled=False):
             <tr><td style="padding: 8px; font-weight: bold;">Start Time:</td><td style="padding: 8px;">{start_time}</td></tr>
             <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Company:</td><td style="padding: 8px;">{booking_data.get('company_name', 'N/A')}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Deal Stage:</td><td style="padding: 8px;">{booking_data.get('deal_stage', 'N/A')}</td></tr>
-            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Contact:</td><td style="padding: 8px;">{booking_data.get('contact_name', 'N/A')}</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Contact Email:</td><td style="padding: 8px;">{booking_data.get('contact_email', 'N/A')}</td></tr>
-            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Contact Phone:</td><td style="padding: 8px;">{booking_data.get('contact_phone', 'N/A')}</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">{booking_data.get('address', 'N/A')}</td></tr>
-            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Notes:</td><td style="padding: 8px;">{booking_data.get('notes', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Deployment Specialist:</td><td style="padding: 8px;">{specialist_name}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Contact:</td><td style="padding: 8px;">{booking_data.get('contact_name', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Contact Email:</td><td style="padding: 8px;">{booking_data.get('contact_email', 'N/A')}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Contact Phone:</td><td style="padding: 8px;">{booking_data.get('contact_phone', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">{booking_data.get('address', 'N/A')}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Notes:</td><td style="padding: 8px;">{booking_data.get('notes', 'N/A')}</td></tr>
         </table>
     </div>
-    """
+    """, formatted_date, status
 
-    # Get assigned specialist name for subject
+
+def send_booking_email(booking_id, booking_data, db, cancelled=False):
+    if not SENDGRID_API_KEY:
+        return
+    recipients = get_booking_recipients(booking_data, db)
+    if not recipients:
+        return
+
+    # Get specialist name
     specialist = "Unknown"
     if booking_data.get("user_id"):
         cur = db.cursor()
@@ -896,6 +891,7 @@ def send_booking_email(booking_id, booking_data, db, cancelled=False):
         if row:
             specialist = row["name"]
 
+    html_body, formatted_date, status = build_booking_html(booking_data, specialist, cancelled)
     subject = f"Deployment {status}: {booking_data.get('title', '')} - {formatted_date} ({specialist})"
 
     # Build SendGrid personalizations (one per recipient)
