@@ -3,12 +3,8 @@ import json
 import uuid
 import hashlib
 import secrets
-import smtplib
+import base64
 from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 from contextlib import contextmanager
 from functools import wraps
 
@@ -17,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 
 app = Flask(__name__)
 
@@ -26,12 +22,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 # HubSpot config
 HUBSPOT_API_KEY = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
 
-# SMTP config
-SMTP_HOST = os.environ.get("SMTP_HOST", "")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
-SMTP_FROM = os.environ.get("SMTP_FROM", "")
+# Resend config
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "deployments@resend.dev")
 
 DEAL_STAGES = {
     "2986384063": "Install/Training",
@@ -730,14 +723,14 @@ def create_booking():
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
 
-    if SMTP_HOST and data.get("contact_email"):
+    if RESEND_API_KEY and data.get("contact_email"):
         try:
             send_calendar_invite(bid, data)
             result["email_sent"] = "sent"
         except Exception as e:
             result["email_sent"] = f"error: {str(e)}"
     elif data.get("contact_email"):
-        result["email_sent"] = "SMTP not configured"
+        result["email_sent"] = "Resend not configured"
 
     return jsonify(result), 201
 
@@ -819,34 +812,37 @@ def download_ics(bid):
 
 
 def send_calendar_invite(booking_id, booking_data):
-    if not all([SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM]):
+    if not RESEND_API_KEY:
         return
     ics_content = generate_ics(booking_data, booking_id)
-    recipients = [booking_data["contact_email"]] if booking_data.get("contact_email") else []
-    if not recipients:
+    recipient = booking_data.get("contact_email")
+    if not recipient:
         return
-    msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"Booking Confirmed: {booking_data['title']}"
-    msg["From"] = SMTP_FROM
-    msg["To"] = ", ".join(recipients)
-    body = MIMEText(
-        f"Your deployment/training has been booked.\n\n"
-        f"Date: {booking_data['start_datetime']} to {booking_data['end_datetime']}\n"
-        f"Location: {booking_data.get('address', 'TBD')}\n"
-        f"Notes: {booking_data.get('notes', 'N/A')}\n\n"
-        f"A calendar invite is attached - click to add to your calendar.",
-        "plain",
+    ics_b64 = base64.b64encode(ics_content.encode("utf-8")).decode("utf-8")
+    html_body = (
+        f"<h2>Deployment Confirmed</h2>"
+        f"<p>Your deployment/training has been booked.</p>"
+        f"<p><strong>Date:</strong> {booking_data['start_datetime']} to {booking_data['end_datetime']}</p>"
+        f"<p><strong>Location:</strong> {booking_data.get('address', 'TBD')}</p>"
+        f"<p><strong>Notes:</strong> {booking_data.get('notes', 'N/A')}</p>"
+        f"<p>A calendar invite is attached — click to add to your calendar.</p>"
     )
-    msg.attach(body)
-    ics_part = MIMEBase("text", "calendar", method="REQUEST")
-    ics_part.set_payload(ics_content.encode("utf-8"))
-    encoders.encode_base64(ics_part)
-    ics_part.add_header("Content-Disposition", "attachment", filename="invite.ics")
-    msg.attach(ics_part)
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASS)
-        server.send_message(msg)
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "from": EMAIL_FROM,
+            "to": [recipient],
+            "subject": f"Booking Confirmed: {booking_data['title']}",
+            "html": html_body,
+            "attachments": [{
+                "filename": "invite.ics",
+                "content": ics_b64,
+                "content_type": "text/calendar",
+            }],
+        },
+    )
+    resp.raise_for_status()
 
 
 @app.route("/api/bookings/<bid>/send-invite", methods=["POST"])
@@ -863,8 +859,8 @@ def send_invite(bid):
     if not email:
         return jsonify({"error": "No email address provided"}), 400
     row["contact_email"] = email
-    if not SMTP_HOST:
-        return jsonify({"message": "SMTP not configured. Use the ICS download link instead.", "ics_url": f"/api/bookings/{bid}/ics"})
+    if not RESEND_API_KEY:
+        return jsonify({"message": "Resend not configured. Use the ICS download link instead.", "ics_url": f"/api/bookings/{bid}/ics"})
     try:
         send_calendar_invite(bid, row)
         return jsonify({"message": f"Invite sent to {email}"})
