@@ -116,43 +116,32 @@
         .right-panel h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
         .right-panel .sub { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
 
-        /* Duration selector */
-        .duration-bar { display: flex; gap: 8px; margin-bottom: 20px; }
-        .duration-btn {
-            flex: 1;
-            padding: 10px;
+        /* Start time selector */
+        .start-time-area { margin-bottom: 20px; }
+        .start-time-area label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
+        .start-time-select {
+            width: 100%;
+            padding: 12px 14px;
             border: 2px solid var(--border);
             border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text);
             background: #fff;
             cursor: pointer;
-            text-align: center;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-muted);
-            transition: all 0.15s;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7c93' fill='none' stroke-width='2'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
         }
-        .duration-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .duration-btn.active { border-color: var(--primary); background: var(--primary); color: #fff; }
-
-        /* Time slots */
-        .time-slots { display: flex; flex-direction: column; gap: 8px; }
-        .time-slot {
-            padding: 12px 16px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            text-align: center;
-            color: var(--primary);
-            font-weight: 500;
-            transition: all 0.15s;
-        }
-        .time-slot:hover { border-color: var(--primary); background: #fff5f3; }
-        .time-slot.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
-        .time-slot.booked { background: #f0f0f0; color: #999; cursor: default; text-decoration: line-through; border-color: #e0e0e0; }
-        .time-slot.booked:hover { background: #f0f0f0; border-color: #e0e0e0; }
+        .start-time-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(255,92,53,0.1); }
 
         .no-slots { text-align: center; padding: 30px; color: var(--text-muted); font-size: 14px; }
+
+        .assigned-info { background: #f0f7ff; border: 1px solid #d0e3f7; border-radius: 8px; padding: 12px 16px; margin-top: 16px; font-size: 14px; }
+        .assigned-info .assigned-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px; }
+        .assigned-info .assigned-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+        .assigned-info .assigned-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
         /* ── Booking form (step 2) ── */
         .form-row { margin-bottom: 14px; }
@@ -266,25 +255,44 @@
                     <div class="cal-grid" id="calGrid"></div>
 
                     <div class="user-filter">
-                        <h4>Installer / Trainer</h4>
+                        <h4>Filter by Team Member</h4>
                         <select id="userSelect" onchange="onUserChange()">
                             <option value="">All Team Members</option>
                         </select>
                     </div>
                 </div>
                 <div class="right-panel">
-                    <div class="duration-bar">
-                        <div class="duration-btn" data-hours="2" onclick="setDuration(2, this)">2 hours</div>
-                        <div class="duration-btn active" data-hours="4" onclick="setDuration(4, this)">4 hours</div>
-                        <div class="duration-btn" data-hours="8" onclick="setDuration(8, this)">Full day</div>
+                    <h3>Select a Start Time</h3>
+                    <div class="sub" id="selectedDateLabel">Select a date on the calendar</div>
+
+                    <div id="startTimeArea" class="hidden">
+                        <div class="start-time-area">
+                            <label>Start Time</label>
+                            <select class="start-time-select" id="startTimeSelect">
+                                <option value="">Choose a start time...</option>
+                                <option value="07:00">7:00 AM</option>
+                                <option value="08:00">8:00 AM</option>
+                                <option value="09:00">9:00 AM</option>
+                                <option value="10:00">10:00 AM</option>
+                                <option value="11:00">11:00 AM</option>
+                                <option value="12:00">12:00 PM</option>
+                                <option value="13:00">1:00 PM</option>
+                                <option value="14:00">2:00 PM</option>
+                                <option value="15:00">3:00 PM</option>
+                                <option value="16:00">4:00 PM</option>
+                                <option value="17:00">5:00 PM</option>
+                                <option value="18:00">6:00 PM</option>
+                                <option value="19:00">7:00 PM</option>
+                            </select>
+                        </div>
+
+                        <div id="assignedUserInfo" class="hidden"></div>
+
+                        <button type="button" class="btn btn-primary btn-block" id="confirmTimeBtn" onclick="confirmTimeAndProceed()" disabled>Continue to Booking Details</button>
                     </div>
 
-                    <div id="timeSlotsArea">
-                        <h3>What time works best?</h3>
-                        <div class="sub" id="selectedDateLabel">Select a date on the calendar</div>
-                        <div class="time-slots" id="timeSlots">
-                            <div class="no-slots">Pick a date to see available times</div>
-                        </div>
+                    <div id="noDateSelected">
+                        <div class="no-slots">Pick a date to get started</div>
                     </div>
 
                     <!-- Existing bookings for selected date -->
@@ -325,9 +333,10 @@
                         </select>
                     </div>
 
-                    <div class="form-row">
-                        <label>Assigned To *</label>
-                        <select id="bookingUser" required></select>
+                    <input type="hidden" id="bookingUser">
+                    <div id="step2AssignedInfo" class="assigned-info" style="margin-bottom:14px;">
+                        <div class="assigned-label">Auto-Assigned To</div>
+                        <div class="assigned-name" id="step2AssignedName"></div>
                     </div>
 
                     <div class="form-row-2">
@@ -393,8 +402,8 @@
         // Calendar state
         let viewYear, viewMonth; // 0-indexed month
         let selectedDate = null;
-        let selectedTime = null;
-        let durationHours = 4;
+        let selectedStartTime = null;
+        let assignedUser = null;
         let selectedUserId = "";
         let existingBookings = [];
 
@@ -422,10 +431,8 @@
             const res = await fetch("/api/users");
             allUsers = await res.json();
             const sel = document.getElementById("userSelect");
-            const bookSel = document.getElementById("bookingUser");
             allUsers.forEach(u => {
                 sel.innerHTML += `<option value="${u.id}">${u.name}</option>`;
-                bookSel.innerHTML += `<option value="${u.id}">${u.name}</option>`;
             });
         }
 
@@ -500,18 +507,24 @@
 
         async function selectDate(dateStr) {
             selectedDate = new Date(dateStr + "T00:00:00");
-            selectedTime = null;
+            selectedStartTime = null;
+            assignedUser = null;
             renderCalendar();
 
             const d = selectedDate;
             const opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-            document.getElementById("selectedDateLabel").textContent = `Showing times for ${d.toLocaleDateString('en-GB', opts)}`;
+            document.getElementById("selectedDateLabel").textContent = d.toLocaleDateString('en-GB', opts);
 
-            await loadTimeSlotsForDate(dateStr);
+            document.getElementById("startTimeArea").classList.remove("hidden");
+            document.getElementById("noDateSelected").classList.add("hidden");
+            document.getElementById("startTimeSelect").value = "";
+            document.getElementById("confirmTimeBtn").disabled = true;
+            document.getElementById("assignedUserInfo").classList.add("hidden");
+
+            await loadBookingsForDate(dateStr);
         }
 
-        async function loadTimeSlotsForDate(dateStr) {
-            // Fetch existing bookings for this date
+        async function loadBookingsForDate(dateStr) {
             const nextDate = new Date(dateStr + "T00:00:00");
             nextDate.setDate(nextDate.getDate() + 1);
             const endStr = nextDate.toISOString().slice(0, 10);
@@ -526,53 +539,63 @@
                 existingBookings = [];
             }
 
-            renderTimeSlots(dateStr);
             renderDayBookings(dateStr);
         }
 
-        function renderTimeSlots(dateStr) {
-            const container = document.getElementById("timeSlots");
-            const slots = [];
-
-            // Generate time slots from 7am to 7pm
-            for (let h = 7; h <= 19 - durationHours; h++) {
-                const startHour = h;
-                const endHour = h + durationHours;
-                const startStr = `${String(startHour).padStart(2,'0')}:00`;
-                const endStr = `${String(endHour).padStart(2,'0')}:00`;
-
-                // Check if this slot overlaps with existing bookings
-                const slotStart = new Date(`${dateStr}T${startStr}`);
-                const slotEnd = new Date(`${dateStr}T${endStr}`);
-
-                const isBooked = existingBookings.some(b => {
-                    const bStart = new Date(b.start_datetime);
-                    const bEnd = new Date(b.end_datetime);
-                    return slotStart < bEnd && slotEnd > bStart;
-                });
-
-                slots.push({ startStr, endStr, startHour, isBooked, slotStart, slotEnd });
-            }
-
-            if (!slots.length) {
-                container.innerHTML = '<div class="no-slots">No available times for this date</div>';
+        // When start time is chosen, call round-robin API
+        document.getElementById("startTimeSelect").addEventListener("change", async function() {
+            const time = this.value;
+            if (!time || !selectedDate) {
+                document.getElementById("confirmTimeBtn").disabled = true;
+                document.getElementById("assignedUserInfo").classList.add("hidden");
+                assignedUser = null;
                 return;
             }
 
-            container.innerHTML = slots.map(s => {
-                const cls = s.isBooked ? "time-slot booked" : "time-slot";
-                const label = `${s.startStr} - ${s.endStr}`;
-                if (s.isBooked) {
-                    const booking = existingBookings.find(b => {
-                        const bStart = new Date(b.start_datetime);
-                        const bEnd = new Date(b.end_datetime);
-                        return s.slotStart < bEnd && s.slotEnd > bStart;
-                    });
-                    const bookedBy = booking ? ` (${booking.user_name || 'booked'})` : '';
-                    return `<div class="${cls}">${label}${bookedBy}</div>`;
+            selectedStartTime = time;
+            const dateStr = selectedDate.toISOString().slice(0, 10);
+
+            try {
+                const res = await fetch(`/api/round-robin?date=${dateStr}&start_time=${time}`);
+                const data = await res.json();
+                if (data.user) {
+                    assignedUser = data.user;
+                    document.getElementById("assignedUserInfo").innerHTML = `
+                        <div class="assigned-info">
+                            <div class="assigned-label">Auto-Assigned To</div>
+                            <div class="assigned-name">
+                                <span class="assigned-dot" style="background:${data.user.color || '#3788d8'}"></span>
+                                ${data.user.name}
+                            </div>
+                        </div>`;
+                    document.getElementById("assignedUserInfo").classList.remove("hidden");
+                    document.getElementById("confirmTimeBtn").disabled = false;
+                } else {
+                    assignedUser = null;
+                    document.getElementById("assignedUserInfo").innerHTML = `
+                        <div class="assigned-info" style="background:#fff3f0;border-color:#ffcfc4;">
+                            <div class="assigned-name" style="color:var(--danger);">No team members available for this date</div>
+                        </div>`;
+                    document.getElementById("assignedUserInfo").classList.remove("hidden");
+                    document.getElementById("confirmTimeBtn").disabled = true;
                 }
-                return `<div class="${cls}" onclick="selectTime('${dateStr}', '${s.startStr}', '${s.endStr}')">${label}</div>`;
-            }).join("");
+            } catch (e) {
+                assignedUser = null;
+                document.getElementById("confirmTimeBtn").disabled = true;
+            }
+        });
+
+        function confirmTimeAndProceed() {
+            if (!selectedStartTime || !assignedUser) return;
+            goToStep2();
+        }
+
+        function onUserChange() {
+            selectedUserId = document.getElementById("userSelect").value;
+            if (selectedDate) {
+                const dateStr = selectedDate.toISOString().slice(0, 10);
+                loadBookingsForDate(dateStr);
+            }
         }
 
         function renderDayBookings(dateStr) {
@@ -602,38 +625,9 @@
                 }).join("");
         }
 
-        function selectTime(dateStr, startStr, endStr) {
-            selectedTime = { dateStr, startStr, endStr };
-
-            // Highlight selected slot
-            document.querySelectorAll(".time-slot").forEach(el => el.classList.remove("selected"));
-            event.target.classList.add("selected");
-
-            // Move to step 2
-            setTimeout(() => goToStep2(), 300);
-        }
-
-        function setDuration(hours, el) {
-            durationHours = hours;
-            document.querySelectorAll(".duration-btn").forEach(b => b.classList.remove("active"));
-            el.classList.add("active");
-            if (selectedDate) {
-                const dateStr = selectedDate.toISOString().slice(0, 10);
-                renderTimeSlots(dateStr);
-            }
-        }
-
-        function onUserChange() {
-            selectedUserId = document.getElementById("userSelect").value;
-            if (selectedDate) {
-                const dateStr = selectedDate.toISOString().slice(0, 10);
-                loadTimeSlotsForDate(dateStr);
-            }
-        }
-
         // ── Step navigation ──
         function goToStep2() {
-            if (!selectedTime) return;
+            if (!selectedStartTime || !assignedUser) return;
 
             document.getElementById("step1").classList.add("hidden");
             document.getElementById("step2").classList.remove("hidden");
@@ -641,15 +635,17 @@
             document.getElementById("stepLine").classList.add("active");
             document.getElementById("stepLabel2").classList.add("active");
 
-            const d = new Date(selectedTime.dateStr);
+            const dateStr = selectedDate.toISOString().slice(0, 10);
+            const d = new Date(dateStr + "T00:00:00");
             const opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+            const h = parseInt(selectedStartTime.split(":")[0]);
+            const timeLabel = h > 12 ? `${h-12}:00 PM` : h === 12 ? '12:00 PM' : `${h}:00 AM`;
             document.getElementById("step2Summary").textContent =
-                `${d.toLocaleDateString('en-GB', opts)} | ${selectedTime.startStr} - ${selectedTime.endStr}`;
+                `${d.toLocaleDateString('en-GB', opts)} | Start: ${timeLabel} (All day)`;
 
-            // Pre-fill user if one was selected
-            if (selectedUserId) {
-                document.getElementById("bookingUser").value = selectedUserId;
-            }
+            document.getElementById("bookingUser").value = assignedUser.id;
+            document.getElementById("step2AssignedName").innerHTML =
+                `<span class="assigned-dot" style="background:${assignedUser.color || '#3788d8'}"></span> ${assignedUser.name}`;
         }
 
         function goToStep1() {
@@ -717,11 +713,12 @@
 
         // ── Save booking ──
         async function saveBooking() {
+            const dateStr = selectedDate.toISOString().slice(0, 10);
             const data = {
                 title: document.getElementById("bookingTitle").value,
                 booking_type: document.getElementById("bookingType").value,
-                start_datetime: `${selectedTime.dateStr}T${selectedTime.startStr}`,
-                end_datetime: `${selectedTime.dateStr}T${selectedTime.endStr}`,
+                start_datetime: `${dateStr}T${selectedStartTime}`,
+                end_datetime: `${dateStr}T23:59`,
                 user_id: document.getElementById("bookingUser").value,
                 company_name: document.getElementById("bookingCompany").value,
                 hubspot_deal_id: document.getElementById("selectedDealId").value || null,
@@ -733,7 +730,7 @@
             };
 
             if (!data.title || !data.user_id) {
-                alert("Please fill in title and assigned team member.");
+                alert("Please fill in a title.");
                 return;
             }
 
@@ -748,7 +745,7 @@
                 document.getElementById("bookingForm").reset();
                 document.getElementById("selectedDealInfo").innerHTML = "";
                 goToStep1();
-                selectDate(selectedTime.dateStr);
+                selectDate(dateStr);
             } else {
                 alert("Failed to save booking.");
             }

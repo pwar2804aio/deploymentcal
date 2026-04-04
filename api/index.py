@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 app = Flask(__name__)
 
@@ -346,6 +346,74 @@ def delete_timeoff(uid, tid):
     db.commit()
     cur.close()
     return jsonify({"ok": True})
+
+
+# ── Round Robin Assignment ─────────��─────────────────────────────────────────
+
+@app.route("/api/round-robin")
+def round_robin():
+    date_str = request.args.get("date")  # YYYY-MM-DD
+    if not date_str:
+        return jsonify({"error": "date parameter required"}), 400
+
+    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    dow = target_date.weekday()  # Mon=0..Sun=6
+
+    db = get_db()
+    cur = db.cursor()
+
+    # Get active users who have availability on this day of week
+    cur.execute("""
+        SELECT u.id, u.name, u.email, u.role, u.color
+        FROM users u
+        JOIN availability a ON a.user_id = u.id AND a.day_of_week = %s
+        WHERE u.active = 1
+    """, (dow,))
+    available_users = dict_row(cur)
+
+    if not available_users:
+        cur.close()
+        return jsonify({"user": None})
+
+    # Exclude users on time off for this date
+    cur.execute("""
+        SELECT DISTINCT user_id FROM time_off
+        WHERE start_date <= %s AND end_date >= %s
+    """, (date_str, date_str))
+    off_ids = {row[0] for row in cur.fetchall()}
+    available_users = [u for u in available_users if u["id"] not in off_ids]
+
+    if not available_users:
+        cur.close()
+        return jsonify({"user": None})
+
+    # Exclude users who already have a booking on this date
+    next_date = (target_date + timedelta(days=1)).strftime("%Y-%m-%d")
+    cur.execute("""
+        SELECT DISTINCT user_id FROM bookings
+        WHERE start_datetime >= %s AND start_datetime < %s
+    """, (date_str, next_date))
+    booked_ids = {row[0] for row in cur.fetchall()}
+    available_users = [u for u in available_users if u["id"] not in booked_ids]
+
+    if not available_users:
+        cur.close()
+        return jsonify({"user": None})
+
+    # Round robin: pick user with fewest total bookings
+    remaining_ids = [u["id"] for u in available_users]
+    placeholders = ",".join(["%s"] * len(remaining_ids))
+    cur.execute(f"""
+        SELECT user_id, COUNT(*) as cnt FROM bookings
+        WHERE user_id IN ({placeholders})
+        GROUP BY user_id
+    """, remaining_ids)
+    counts = {row[0]: row[1] for row in cur.fetchall()}
+    cur.close()
+
+    # Sort by booking count (fewest first)
+    available_users.sort(key=lambda u: counts.get(u["id"], 0))
+    return jsonify({"user": available_users[0]})
 
 
 # ── Bookings API ──────────────────────────────────────────────────────────────
