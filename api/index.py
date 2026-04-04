@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import json
 import uuid
 import smtplib
@@ -8,14 +7,18 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+from contextlib import contextmanager
 
+import psycopg2
+import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
+VERSION = "1.0.0"
+
 app = Flask(__name__)
 
-DB_PATH = "/tmp/bookings.db"
-_db_initialized = False
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # HubSpot config
 HUBSPOT_API_KEY = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
@@ -33,19 +36,18 @@ DEAL_STAGES = {
     "2992080601": "On Hold",
 }
 
+_db_initialized = False
+
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
     if "db" not in g:
         global _db_initialized
-        if not _db_initialized or not os.path.exists(DB_PATH):
-            init_db()
+        g.db = psycopg2.connect(DATABASE_URL, sslmode="require")
+        if not _db_initialized:
+            init_db(g.db)
             _db_initialized = True
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA journal_mode=WAL")
-        g.db.execute("PRAGMA foreign_keys=ON")
     return g.db
 
 
@@ -56,11 +58,9 @@ def close_db(exc):
         db.close()
 
 
-def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.execute("PRAGMA journal_mode=WAL")
-    db.execute("PRAGMA foreign_keys=ON")
-    db.executescript("""
+def init_db(conn):
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -68,8 +68,10 @@ def init_db():
             role TEXT NOT NULL DEFAULT 'installer',
             color TEXT NOT NULL DEFAULT '#3788d8',
             active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS availability (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -78,6 +80,8 @@ def init_db():
             end_time TEXT NOT NULL,
             UNIQUE(user_id, day_of_week)
         );
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS time_off (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -85,6 +89,8 @@ def init_db():
             end_date TEXT NOT NULL,
             reason TEXT
         );
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS bookings (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -102,11 +108,31 @@ def init_db():
             address TEXT,
             notes TEXT,
             status TEXT NOT NULL DEFAULT 'confirmed',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
     """)
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close()
+
+
+def dict_row(cursor):
+    """Convert cursor results to list of dicts."""
+    columns = [desc[0] for desc in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def dict_one(cursor):
+    """Convert single cursor result to dict."""
+    columns = [desc[0] for desc in cursor.description]
+    row = cursor.fetchone()
+    return dict(zip(columns, row)) if row else None
+
+
+# ── Version API ──────────────────────────────────────────────────────────────
+
+@app.route("/api/version")
+def get_version():
+    return jsonify({"version": VERSION})
 
 
 # ── HubSpot API ──────────────────────────────────────────────────────────────
@@ -211,8 +237,11 @@ def get_deal_contacts(deal_id):
 @app.route("/api/users", methods=["GET"])
 def list_users():
     db = get_db()
-    rows = db.execute("SELECT * FROM users WHERE active = 1 ORDER BY name").fetchall()
-    return jsonify([dict(r) for r in rows])
+    cur = db.cursor()
+    cur.execute("SELECT * FROM users WHERE active = 1 ORDER BY name")
+    rows = dict_row(cur)
+    cur.close()
+    return jsonify(rows)
 
 
 @app.route("/api/users", methods=["POST"])
@@ -220,11 +249,13 @@ def create_user():
     data = request.json
     uid = str(uuid.uuid4())
     db = get_db()
-    db.execute(
-        "INSERT INTO users (id, name, email, role, color) VALUES (?, ?, ?, ?, ?)",
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO users (id, name, email, role, color) VALUES (%s, %s, %s, %s, %s)",
         (uid, data["name"], data["email"], data.get("role", "installer"), data.get("color", "#3788d8")),
     )
     db.commit()
+    cur.close()
     return jsonify({"id": uid}), 201
 
 
@@ -232,19 +263,23 @@ def create_user():
 def update_user(uid):
     data = request.json
     db = get_db()
-    db.execute(
-        "UPDATE users SET name=?, email=?, role=?, color=?, active=? WHERE id=?",
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE users SET name=%s, email=%s, role=%s, color=%s, active=%s WHERE id=%s",
         (data["name"], data["email"], data.get("role", "installer"), data.get("color", "#3788d8"), data.get("active", 1), uid),
     )
     db.commit()
+    cur.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/users/<uid>", methods=["DELETE"])
 def delete_user(uid):
     db = get_db()
-    db.execute("UPDATE users SET active = 0 WHERE id = ?", (uid,))
+    cur = db.cursor()
+    cur.execute("UPDATE users SET active = 0 WHERE id = %s", (uid,))
     db.commit()
+    cur.close()
     return jsonify({"ok": True})
 
 
@@ -253,21 +288,26 @@ def delete_user(uid):
 @app.route("/api/users/<uid>/availability", methods=["GET"])
 def get_availability(uid):
     db = get_db()
-    rows = db.execute("SELECT * FROM availability WHERE user_id = ? ORDER BY day_of_week", (uid,)).fetchall()
-    return jsonify([dict(r) for r in rows])
+    cur = db.cursor()
+    cur.execute("SELECT * FROM availability WHERE user_id = %s ORDER BY day_of_week", (uid,))
+    rows = dict_row(cur)
+    cur.close()
+    return jsonify(rows)
 
 
 @app.route("/api/users/<uid>/availability", methods=["PUT"])
 def set_availability(uid):
     data = request.json
     db = get_db()
-    db.execute("DELETE FROM availability WHERE user_id = ?", (uid,))
+    cur = db.cursor()
+    cur.execute("DELETE FROM availability WHERE user_id = %s", (uid,))
     for slot in data:
-        db.execute(
-            "INSERT INTO availability (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
+        cur.execute(
+            "INSERT INTO availability (id, user_id, day_of_week, start_time, end_time) VALUES (%s, %s, %s, %s, %s)",
             (str(uuid.uuid4()), uid, slot["day_of_week"], slot["start_time"], slot["end_time"]),
         )
     db.commit()
+    cur.close()
     return jsonify({"ok": True})
 
 
@@ -276,8 +316,11 @@ def set_availability(uid):
 @app.route("/api/users/<uid>/timeoff", methods=["GET"])
 def get_timeoff(uid):
     db = get_db()
-    rows = db.execute("SELECT * FROM time_off WHERE user_id = ? ORDER BY start_date", (uid,)).fetchall()
-    return jsonify([dict(r) for r in rows])
+    cur = db.cursor()
+    cur.execute("SELECT * FROM time_off WHERE user_id = %s ORDER BY start_date", (uid,))
+    rows = dict_row(cur)
+    cur.close()
+    return jsonify(rows)
 
 
 @app.route("/api/users/<uid>/timeoff", methods=["POST"])
@@ -285,19 +328,23 @@ def add_timeoff(uid):
     data = request.json
     tid = str(uuid.uuid4())
     db = get_db()
-    db.execute(
-        "INSERT INTO time_off (id, user_id, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)",
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO time_off (id, user_id, start_date, end_date, reason) VALUES (%s, %s, %s, %s, %s)",
         (tid, uid, data["start_date"], data["end_date"], data.get("reason", "")),
     )
     db.commit()
+    cur.close()
     return jsonify({"id": tid}), 201
 
 
 @app.route("/api/users/<uid>/timeoff/<tid>", methods=["DELETE"])
 def delete_timeoff(uid, tid):
     db = get_db()
-    db.execute("DELETE FROM time_off WHERE id = ? AND user_id = ?", (tid, uid))
+    cur = db.cursor()
+    cur.execute("DELETE FROM time_off WHERE id = %s AND user_id = %s", (tid, uid))
     db.commit()
+    cur.close()
     return jsonify({"ok": True})
 
 
@@ -306,23 +353,26 @@ def delete_timeoff(uid, tid):
 @app.route("/api/bookings", methods=["GET"])
 def list_bookings():
     db = get_db()
+    cur = db.cursor()
     start = request.args.get("start")
     end = request.args.get("end")
     user_id = request.args.get("user_id")
     query = "SELECT b.*, u.name as user_name, u.color as user_color FROM bookings b JOIN users u ON b.user_id = u.id WHERE 1=1"
     params = []
     if start:
-        query += " AND b.end_datetime >= ?"
+        query += " AND b.end_datetime >= %s"
         params.append(start)
     if end:
-        query += " AND b.start_datetime <= ?"
+        query += " AND b.start_datetime <= %s"
         params.append(end)
     if user_id:
-        query += " AND b.user_id = ?"
+        query += " AND b.user_id = %s"
         params.append(user_id)
     query += " ORDER BY b.start_datetime"
-    rows = db.execute(query, params).fetchall()
-    return jsonify([dict(r) for r in rows])
+    cur.execute(query, params)
+    rows = dict_row(cur)
+    cur.close()
+    return jsonify(rows)
 
 
 @app.route("/api/bookings", methods=["POST"])
@@ -330,12 +380,13 @@ def create_booking():
     data = request.json
     bid = str(uuid.uuid4())
     db = get_db()
-    db.execute(
+    cur = db.cursor()
+    cur.execute(
         """INSERT INTO bookings
         (id, title, booking_type, start_datetime, end_datetime, user_id,
          company_name, hubspot_deal_id, hubspot_company_id, deal_stage,
          contact_name, contact_email, contact_phone, address, notes, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (bid, data["title"], data.get("booking_type", "install"),
          data["start_datetime"], data["end_datetime"], data["user_id"],
          data.get("company_name"), data.get("hubspot_deal_id"),
@@ -345,10 +396,14 @@ def create_booking():
          data.get("notes"), data.get("status", "confirmed")),
     )
     db.commit()
+    cur.close()
 
     if HUBSPOT_API_KEY and data.get("hubspot_deal_id"):
         try:
-            user = db.execute("SELECT name FROM users WHERE id = ?", (data["user_id"],)).fetchone()
+            cur2 = db.cursor()
+            cur2.execute("SELECT name FROM users WHERE id = %s", (data["user_id"],))
+            user = dict_one(cur2)
+            cur2.close()
             note_body = (
                 f"Deployment booking created\n"
                 f"Type: {data.get('booking_type', 'install').title()}\n"
@@ -379,12 +434,13 @@ def create_booking():
 def update_booking(bid):
     data = request.json
     db = get_db()
-    db.execute(
+    cur = db.cursor()
+    cur.execute(
         """UPDATE bookings SET
-        title=?, booking_type=?, start_datetime=?, end_datetime=?, user_id=?,
-        company_name=?, hubspot_deal_id=?, hubspot_company_id=?, deal_stage=?,
-        contact_name=?, contact_email=?, contact_phone=?, address=?, notes=?, status=?
-        WHERE id=?""",
+        title=%s, booking_type=%s, start_datetime=%s, end_datetime=%s, user_id=%s,
+        company_name=%s, hubspot_deal_id=%s, hubspot_company_id=%s, deal_stage=%s,
+        contact_name=%s, contact_email=%s, contact_phone=%s, address=%s, notes=%s, status=%s
+        WHERE id=%s""",
         (data["title"], data.get("booking_type", "install"),
          data["start_datetime"], data["end_datetime"], data["user_id"],
          data.get("company_name"), data.get("hubspot_deal_id"),
@@ -394,14 +450,17 @@ def update_booking(bid):
          data.get("notes"), data.get("status", "confirmed"), bid),
     )
     db.commit()
+    cur.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/bookings/<bid>", methods=["DELETE"])
 def delete_booking(bid):
     db = get_db()
-    db.execute("DELETE FROM bookings WHERE id = ?", (bid,))
+    cur = db.cursor()
+    cur.execute("DELETE FROM bookings WHERE id = %s", (bid,))
     db.commit()
+    cur.close()
     return jsonify({"ok": True})
 
 
@@ -432,10 +491,13 @@ END:VCALENDAR"""
 @app.route("/api/bookings/<bid>/ics")
 def download_ics(bid):
     db = get_db()
-    row = db.execute("SELECT * FROM bookings WHERE id = ?", (bid,)).fetchone()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bookings WHERE id = %s", (bid,))
+    row = dict_one(cur)
+    cur.close()
     if not row:
         return jsonify({"error": "Booking not found"}), 404
-    ics = generate_ics(dict(row), bid)
+    ics = generate_ics(row, bid)
     return ics, 200, {
         "Content-Type": "text/calendar; charset=utf-8",
         "Content-Disposition": f'attachment; filename="booking-{bid[:8]}.ics"',
@@ -476,18 +538,20 @@ def send_calendar_invite(booking_id, booking_data):
 @app.route("/api/bookings/<bid>/send-invite", methods=["POST"])
 def send_invite(bid):
     db = get_db()
-    row = db.execute("SELECT * FROM bookings WHERE id = ?", (bid,)).fetchone()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bookings WHERE id = %s", (bid,))
+    row = dict_one(cur)
+    cur.close()
     if not row:
         return jsonify({"error": "Booking not found"}), 404
-    data = dict(row)
-    email = request.json.get("email", data.get("contact_email"))
+    email = request.json.get("email", row.get("contact_email"))
     if not email:
         return jsonify({"error": "No email address provided"}), 400
-    data["contact_email"] = email
+    row["contact_email"] = email
     if not SMTP_HOST:
         return jsonify({"message": "SMTP not configured. Use the ICS download link instead.", "ics_url": f"/api/bookings/{bid}/ics"})
     try:
-        send_calendar_invite(bid, data)
+        send_calendar_invite(bid, row)
         return jsonify({"message": f"Invite sent to {email}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

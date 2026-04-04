@@ -6,23 +6,23 @@
     <title>Admin - POSUP Deployment Bookings</title>
     <style>
         :root {
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --bg: #f8fafc;
+            --primary: #ff5c35;
+            --primary-dark: #e8481e;
+            --nav-bg: #1b2a4a;
+            --bg: #f5f8fa;
             --card: #ffffff;
-            --border: #e2e8f0;
-            --text: #1e293b;
-            --text-muted: #64748b;
-            --success: #16a34a;
-            --warning: #d97706;
-            --danger: #dc2626;
+            --border: #e5e8ed;
+            --text: #1a1f36;
+            --text-muted: #6b7c93;
+            --success: #00c48c;
+            --warning: #f5a623;
+            --danger: #e8481e;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
 
         .top-bar {
-            background: var(--card);
-            border-bottom: 1px solid var(--border);
+            background: var(--nav-bg);
             padding: 12px 24px;
             display: flex;
             align-items: center;
@@ -31,17 +31,18 @@
             top: 0;
             z-index: 100;
         }
-        .top-bar h1 { font-size: 20px; font-weight: 700; }
+        .top-bar h1 { font-size: 20px; font-weight: 700; color: #ffffff; }
         .top-bar h1 span { color: var(--primary); }
         .top-bar nav a {
             margin-left: 16px;
             text-decoration: none;
-            color: var(--text-muted);
+            color: rgba(255,255,255,0.7);
             font-weight: 500;
             font-size: 14px;
         }
-        .top-bar nav a:hover { color: var(--primary); }
-        .top-bar nav a.active { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 2px; }
+        .top-bar nav a:hover { color: #ffffff; }
+        .top-bar nav a.active { color: #ffffff; border-bottom: 2px solid var(--primary); padding-bottom: 2px; }
+        .version-badge { font-size: 10px; color: rgba(255,255,255,0.4); margin-left: 8px; }
 
         .container { max-width: 960px; margin: 24px auto; padding: 0 24px; }
 
@@ -189,7 +190,7 @@
 </head>
 <body>
     <div class="top-bar">
-        <h1><span>POSUP</span> Admin</h1>
+        <h1><span>POSUP</span> Admin <span class="version-badge" id="versionBadge"></span></h1>
         <nav>
             <a href="/">Calendar</a>
             <a href="/admin" class="active">Admin</a>
@@ -315,6 +316,9 @@
 
         document.addEventListener("DOMContentLoaded", () => {
             loadUsers();
+            fetch("/api/version").then(r => r.json()).then(d => {
+                document.getElementById("versionBadge").textContent = "v" + d.version;
+            }).catch(() => {});
         });
 
         // ── Tabs ──
