@@ -730,6 +730,7 @@
                 company_name: document.getElementById("bookingCompany").value,
                 hubspot_deal_id: document.getElementById("selectedDealId").value || null,
                 hubspot_company_id: document.getElementById("selectedCompanyId").value || null,
+                deal_stage: document.getElementById("bookingType").value,
                 contact_name: document.getElementById("bookingContactName").value,
                 contact_email: document.getElementById("bookingContactEmail").value,
                 contact_phone: document.getElementById("bookingContactPhone").value,
@@ -749,7 +750,13 @@
             });
 
             if (res.ok) {
-                alert("Booking confirmed!");
+                const result = await res.json();
+                let msg = "Booking confirmed!";
+                if (result.hubspot_note === "sent") msg += "\nHubSpot note created.";
+                else if (result.hubspot_note) msg += "\nHubSpot note: " + result.hubspot_note;
+                if (result.email_sent === "sent") msg += "\nCalendar invite emailed.";
+                else if (result.email_sent) msg += "\nEmail: " + result.email_sent;
+                alert(msg);
                 document.getElementById("bookingForm").reset();
                 document.getElementById("selectedDealInfo").innerHTML = "";
                 goToStep1();

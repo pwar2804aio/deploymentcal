@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 
 app = Flask(__name__)
 
@@ -133,18 +133,6 @@ def dict_one(cursor):
 @app.route("/api/version")
 def get_version():
     return jsonify({"version": VERSION})
-
-
-@app.route("/api/debug-env")
-def debug_env():
-    token = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
-    return jsonify({
-        "token_length": len(token),
-        "token_start": token[:8] if token else "",
-        "token_end": token[-8:] if token else "",
-        "has_spaces": token != token.strip(),
-        "has_quotes": token.startswith('"') or token.startswith("'"),
-    })
 
 
 # ── HubSpot API ──────────────────────────────────────────────────────────────
@@ -509,6 +497,8 @@ def create_booking():
     db.commit()
     cur.close()
 
+    result = {"id": bid, "hubspot_note": None, "email_sent": None}
+
     if HUBSPOT_API_KEY and data.get("hubspot_deal_id"):
         try:
             cur2 = db.cursor()
@@ -520,6 +510,9 @@ def create_booking():
                 f"Type: {data.get('booking_type', 'install').title()}\n"
                 f"Date: {data['start_datetime']} - {data['end_datetime']}\n"
                 f"Assigned to: {user['name'] if user else 'Unknown'}\n"
+                f"Company: {data.get('company_name', 'N/A')}\n"
+                f"Contact: {data.get('contact_name', 'N/A')} ({data.get('contact_email', 'N/A')})\n"
+                f"Address: {data.get('address', 'N/A')}\n"
                 f"Notes: {data.get('notes', 'N/A')}"
             )
             associations = [{
@@ -535,16 +528,20 @@ def create_booking():
                 "properties": {"hs_note_body": note_body, "hs_timestamp": datetime.utcnow().isoformat() + "Z"},
                 "associations": associations,
             })
-        except Exception:
-            pass
+            result["hubspot_note"] = "sent"
+        except Exception as e:
+            result["hubspot_note"] = f"error: {str(e)}"
 
     if SMTP_HOST and data.get("contact_email"):
         try:
             send_calendar_invite(bid, data)
-        except Exception:
-            pass
+            result["email_sent"] = "sent"
+        except Exception as e:
+            result["email_sent"] = f"error: {str(e)}"
+    elif data.get("contact_email"):
+        result["email_sent"] = "SMTP not configured"
 
-    return jsonify({"id": bid}), 201
+    return jsonify(result), 201
 
 
 @app.route("/api/bookings/<bid>", methods=["PUT"])
