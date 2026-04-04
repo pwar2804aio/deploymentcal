@@ -13,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.4.4"
+VERSION = "2.5.0"
 
 app = Flask(__name__)
 
@@ -25,6 +25,7 @@ HUBSPOT_API_KEY = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
 # Resend config
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", "deployments@resend.dev")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 
 DEAL_STAGES = {
     "2986384063": "Install/Training",
@@ -727,13 +728,13 @@ def create_booking():
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
 
-    if RESEND_API_KEY and data.get("contact_email"):
+    if RESEND_API_KEY:
         try:
-            send_calendar_invite(bid, data)
+            send_booking_email(bid, data, db)
             result["email_sent"] = "sent"
         except Exception as e:
             result["email_sent"] = f"error: {str(e)}"
-    elif data.get("contact_email"):
+    else:
         result["email_sent"] = "Resend not configured"
 
     return jsonify(result), 201
@@ -761,7 +762,17 @@ def update_booking(bid):
     )
     db.commit()
     cur.close()
-    return jsonify({"ok": True})
+
+    result = {"ok": True}
+    # Send cancellation email
+    if data.get("status") == "cancelled" and RESEND_API_KEY:
+        try:
+            send_booking_email(bid, data, db, cancelled=True)
+            result["email_sent"] = "sent"
+        except Exception as e:
+            result["email_sent"] = f"error: {str(e)}"
+
+    return jsonify(result)
 
 
 @app.route("/api/bookings/<bid>", methods=["DELETE"])
@@ -815,36 +826,99 @@ def download_ics(bid):
     }
 
 
-def send_calendar_invite(booking_id, booking_data):
+def get_booking_recipients(booking_data, db):
+    """Get email recipients: logged-in user, assigned specialist, and admin."""
+    recipients = set()
+    # Assigned specialist
+    if booking_data.get("user_id"):
+        cur = db.cursor()
+        cur.execute("SELECT email FROM users WHERE id = %s", (booking_data["user_id"],))
+        row = dict_one(cur)
+        cur.close()
+        if row and row.get("email"):
+            recipients.add(row["email"])
+    # Logged-in user (whoever made/cancelled the booking)
+    current = get_current_user()
+    if current and current.get("email"):
+        recipients.add(current["email"])
+    # Admin always
+    if ADMIN_EMAIL:
+        recipients.add(ADMIN_EMAIL)
+    return list(recipients)
+
+
+def format_booking_date(booking_data):
+    try:
+        dt = datetime.fromisoformat(booking_data['start_datetime'])
+        return dt.strftime('%A %d %B %Y'), dt.strftime('%I:%M %p')
+    except Exception:
+        return booking_data.get('start_datetime', 'TBD'), ''
+
+
+def send_booking_email(booking_id, booking_data, db, cancelled=False):
     if not RESEND_API_KEY:
         return
-    ics_content = generate_ics(booking_data, booking_id)
-    recipient = booking_data.get("contact_email")
-    if not recipient:
+    recipients = get_booking_recipients(booking_data, db)
+    if not recipients:
         return
-    ics_b64 = base64.b64encode(ics_content.encode("utf-8")).decode("utf-8")
-    html_body = (
-        f"<h2>Deployment Confirmed</h2>"
-        f"<p>Your deployment/training has been booked.</p>"
-        f"<p><strong>Date:</strong> {booking_data['start_datetime']} to {booking_data['end_datetime']}</p>"
-        f"<p><strong>Location:</strong> {booking_data.get('address', 'TBD')}</p>"
-        f"<p><strong>Notes:</strong> {booking_data.get('notes', 'N/A')}</p>"
-        f"<p>A calendar invite is attached — click to add to your calendar.</p>"
-    )
+
+    formatted_date, start_time = format_booking_date(booking_data)
+    status = "CANCELLED" if cancelled else "Confirmed"
+    status_color = "#dc2626" if cancelled else "#16a34a"
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <div style="background: {'#fef2f2' if cancelled else '#f0fdf4'}; border-left: 4px solid {status_color}; padding: 16px; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: {status_color};">Deployment {status}</h2>
+        </div>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr><td style="padding: 8px; font-weight: bold; width: 140px;">Title:</td><td style="padding: 8px;">{booking_data.get('title', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Date:</td><td style="padding: 8px;">{formatted_date}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Start Time:</td><td style="padding: 8px;">{start_time}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Company:</td><td style="padding: 8px;">{booking_data.get('company_name', 'N/A')}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Deal Stage:</td><td style="padding: 8px;">{booking_data.get('deal_stage', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Contact:</td><td style="padding: 8px;">{booking_data.get('contact_name', 'N/A')}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Contact Email:</td><td style="padding: 8px;">{booking_data.get('contact_email', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Contact Phone:</td><td style="padding: 8px;">{booking_data.get('contact_phone', 'N/A')}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">{booking_data.get('address', 'N/A')}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Notes:</td><td style="padding: 8px;">{booking_data.get('notes', 'N/A')}</td></tr>
+        </table>
+    </div>
+    """
+
+    # Get assigned specialist name for subject
+    specialist = "Unknown"
+    if booking_data.get("user_id"):
+        cur = db.cursor()
+        cur.execute("SELECT name FROM users WHERE id = %s", (booking_data["user_id"],))
+        row = dict_one(cur)
+        cur.close()
+        if row:
+            specialist = row["name"]
+
+    subject = f"Deployment {status}: {booking_data.get('title', '')} - {formatted_date} ({specialist})"
+
+    email_payload = {
+        "from": EMAIL_FROM,
+        "to": recipients,
+        "subject": subject,
+        "html": html_body,
+    }
+
+    # Attach ICS for confirmed bookings
+    if not cancelled:
+        ics_content = generate_ics(booking_data, booking_id)
+        ics_b64 = base64.b64encode(ics_content.encode("utf-8")).decode("utf-8")
+        email_payload["attachments"] = [{
+            "filename": "invite.ics",
+            "content": ics_b64,
+            "content_type": "text/calendar",
+        }]
+
     resp = requests.post(
         "https://api.resend.com/emails",
         headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-        json={
-            "from": EMAIL_FROM,
-            "to": [recipient],
-            "subject": f"Booking Confirmed: {booking_data['title']}",
-            "html": html_body,
-            "attachments": [{
-                "filename": "invite.ics",
-                "content": ics_b64,
-                "content_type": "text/calendar",
-            }],
-        },
+        json=email_payload,
     )
     resp.raise_for_status()
 
@@ -859,14 +933,10 @@ def send_invite(bid):
     cur.close()
     if not row:
         return jsonify({"error": "Booking not found"}), 404
-    email = request.json.get("email", row.get("contact_email"))
-    if not email:
-        return jsonify({"error": "No email address provided"}), 400
-    row["contact_email"] = email
     if not RESEND_API_KEY:
         return jsonify({"message": "Resend not configured. Use the ICS download link instead.", "ics_url": f"/api/bookings/{bid}/ics"})
     try:
-        send_calendar_invite(bid, row)
-        return jsonify({"message": f"Invite sent to {email}"})
+        send_booking_email(bid, row, db)
+        return jsonify({"message": "Booking email sent to team"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
