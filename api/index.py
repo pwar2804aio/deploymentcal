@@ -135,6 +135,18 @@ def get_version():
     return jsonify({"version": VERSION})
 
 
+@app.route("/api/debug-env")
+def debug_env():
+    token = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
+    return jsonify({
+        "token_length": len(token),
+        "token_start": token[:8] if token else "",
+        "token_end": token[-8:] if token else "",
+        "has_spaces": token != token.strip(),
+        "has_quotes": token.startswith('"') or token.startswith("'"),
+    })
+
+
 # ── HubSpot API ──────────────────────────────────────────────────────────────
 
 def hubspot_request(method, endpoint, data=None):
