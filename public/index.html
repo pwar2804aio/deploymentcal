@@ -302,6 +302,7 @@
                 <form id="bookingForm">
                     <input type="hidden" id="bookingId">
                     <input type="hidden" id="selectedDealId">
+                    <input type="hidden" id="selectedCompanyId">
 
                     <div class="form-row">
                         <label>HubSpot Deal</label>
@@ -689,6 +690,7 @@
                     if (company) {
                         document.getElementById("bookingCompany").value = company.name || "";
                         document.getElementById("bookingAddress").value = [company.address, company.city, company.state, company.zip].filter(Boolean).join(", ");
+                        document.getElementById("selectedCompanyId").value = company.id || "";
                     }
                 }
                 if (contactsRes.ok) {
@@ -713,6 +715,7 @@
                 user_id: document.getElementById("bookingUser").value,
                 company_name: document.getElementById("bookingCompany").value,
                 hubspot_deal_id: document.getElementById("selectedDealId").value || null,
+                hubspot_company_id: document.getElementById("selectedCompanyId").value || null,
                 contact_name: document.getElementById("bookingContactName").value,
                 contact_email: document.getElementById("bookingContactEmail").value,
                 contact_phone: document.getElementById("bookingContactPhone").value,

@@ -367,6 +367,8 @@
             const opts = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
             document.getElementById("availUser").innerHTML = opts;
             document.getElementById("timeoffUser").innerHTML = opts;
+            // Pre-render availability grid for first user
+            if (users.length) loadAvailability();
         }
 
         function openUserModal(userId) {

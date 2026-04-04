@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 app = Flask(__name__)
 
@@ -479,12 +479,18 @@ def create_booking():
                 f"Assigned to: {user['name'] if user else 'Unknown'}\n"
                 f"Notes: {data.get('notes', 'N/A')}"
             )
+            associations = [{
+                "to": {"id": int(data["hubspot_deal_id"])},
+                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}],
+            }]
+            if data.get("hubspot_company_id"):
+                associations.append({
+                    "to": {"id": int(data["hubspot_company_id"])},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 190}],
+                })
             hubspot_request("POST", "/crm/v3/objects/notes", {
                 "properties": {"hs_note_body": note_body, "hs_timestamp": datetime.utcnow().isoformat() + "Z"},
-                "associations": [{
-                    "to": {"id": int(data["hubspot_deal_id"])},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}],
-                }],
+                "associations": associations,
             })
         except Exception:
             pass
