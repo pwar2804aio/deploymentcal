@@ -259,20 +259,38 @@ def auth_me():
 
 @app.route("/api/auth/setup", methods=["POST"])
 def auth_setup():
-    """One-time setup: create admin account if no managers exist."""
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT id FROM users WHERE role = 'manager' AND active = 1")
-    if cur.fetchone():
-        cur.close()
-        return jsonify({"error": "Admin already exists. Use the admin panel to manage users."}), 400
+    """One-time setup: set password for existing manager, or create one if none exist."""
     data = request.json
-    name = data.get("name", "").strip()
     email = (data.get("email") or "").strip().lower()
     password = data.get("password", "")
-    if not name or not email or len(password) < 4:
+    if not email or len(password) < 4:
+        return jsonify({"error": "Email and password (4+ chars) required"}), 400
+
+    db = get_db()
+    cur = db.cursor()
+
+    # Check if this email exists as a manager without a password
+    cur.execute("SELECT id, password_hash FROM users WHERE LOWER(email) = %s AND active = 1", (email,))
+    existing = cur.fetchone()
+    if existing:
+        uid, pw_hash = existing
+        if pw_hash:
+            cur.close()
+            return jsonify({"error": "This account already has a password. Use /login to sign in."}), 400
+        # Set password on existing account
+        cur.execute("UPDATE users SET password_hash = %s, role = 'manager' WHERE id = %s", (hash_password(password), uid))
+        db.commit()
         cur.close()
-        return jsonify({"error": "Name, email, and password (4+ chars) required"}), 400
+        return jsonify({"ok": True, "message": f"Password set for {email}. You can now log in."}), 200
+
+    # No existing user - check if any managers exist with passwords
+    cur.execute("SELECT id FROM users WHERE role = 'manager' AND active = 1 AND password_hash IS NOT NULL")
+    if cur.fetchone():
+        cur.close()
+        return jsonify({"error": "Admin already set up. Ask your admin to create your account."}), 400
+
+    # Create new manager
+    name = data.get("name", email.split("@")[0]).strip()
     uid = str(uuid.uuid4())
     cur.execute(
         "INSERT INTO users (id, name, email, role, color, password_hash) VALUES (%s, %s, %s, %s, %s, %s)",
