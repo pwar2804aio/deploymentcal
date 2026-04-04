@@ -20,6 +20,10 @@
       "dest": "public/admin.html"
     },
     {
+      "src": "/bookings",
+      "dest": "public/bookings.html"
+    },
+    {
       "src": "^/$",
       "dest": "public/index.html"
     }

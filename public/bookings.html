@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Bookings - Deployment Bookings</title>
+    <style>
+        :root {
+            --primary: #ff5c35;
+            --primary-dark: #e8481e;
+            --nav-bg: #1b2a4a;
+            --bg: #f5f8fa;
+            --card: #ffffff;
+            --border: #e5e8ed;
+            --text: #1a1f36;
+            --text-muted: #6b7c93;
+            --success: #00c48c;
+            --danger: #e8481e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+
+        .top-bar {
+            background: var(--nav-bg);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .top-bar h1 { font-size: 20px; font-weight: 700; color: #fff; }
+        .top-bar nav { display: flex; align-items: center; gap: 8px; }
+        .top-bar nav a { margin-left: 16px; text-decoration: none; color: rgba(255,255,255,0.7); font-weight: 500; font-size: 14px; }
+        .top-bar nav a:hover { color: #fff; }
+        .top-bar nav a.active { color: #fff; border-bottom: 2px solid var(--primary); padding-bottom: 2px; }
+        .version-badge { font-size: 10px; color: rgba(255,255,255,0.4); margin-left: 8px; }
+
+        .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+
+        .filters {
+            background: var(--card);
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .filters label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+        .filters input, .filters select {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .filters input:focus, .filters select:focus { outline: none; border-color: var(--primary); }
+        .filter-group { display: flex; align-items: center; gap: 6px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+        .btn:hover { opacity: 0.9; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-success { background: var(--success); color: white; }
+
+        .results-count { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
+
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        thead { background: var(--nav-bg); color: #fff; }
+        th { padding: 12px 16px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f9fafb; }
+
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .badge-install { background: #dbeafe; color: #1d4ed8; }
+        .badge-training { background: #fef3c7; color: #92400e; }
+        .badge-onboarding { background: #d1fae5; color: #065f46; }
+
+        .user-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+        .empty-state h3 { margin-bottom: 8px; color: var(--text); }
+
+        .actions { display: flex; gap: 4px; }
+
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: center; justify-content: center; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--card); border-radius: 12px; width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+        .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h2 { font-size: 18px; }
+        .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); }
+        .modal-body { padding: 20px; }
+        .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+        .field { margin-bottom: 10px; }
+        .field-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .field-value { margin-top: 2px; font-size: 14px; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1><img src="/aio-logo.png" alt="" style="height:28px;vertical-align:middle;margin-right:8px;">All Bookings <span class="version-badge" id="versionBadge"></span></h1>
+        <nav>
+            <a href="/">Calendar</a>
+            <a href="/bookings" class="active">Bookings</a>
+            <a href="/admin">Admin</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <div class="filters">
+            <div class="filter-group">
+                <label>From</label>
+                <input type="date" id="filterFrom">
+            </div>
+            <div class="filter-group">
+                <label>To</label>
+                <input type="date" id="filterTo">
+            </div>
+            <div class="filter-group">
+                <label>Type</label>
+                <select id="filterType">
+                    <option value="">All</option>
+                    <option value="install">Install</option>
+                    <option value="training">Training</option>
+                    <option value="onboarding">Onboarding</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Team Member</label>
+                <select id="filterUser">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="loadBookings()">Filter</button>
+            <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+        </div>
+
+        <div class="results-count" id="resultsCount"></div>
+
+        <div id="bookingsTable"></div>
+    </div>
+
+    <!-- View Booking Modal -->
+    <div class="modal-overlay" id="viewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="viewTitle">Booking Details</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="viewBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+                <a class="btn btn-success btn-sm" id="viewIcsLink" href="#" target="_blank">Download .ics</a>
+                <button class="btn btn-primary btn-sm" onclick="sendInvite()">Send Invite</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allBookings = [];
+        let allUsers = [];
+        let currentBooking = null;
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadUsers();
+            // Default: show bookings from today onwards
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById("filterFrom").value = today;
+            loadBookings();
+            loadVersion();
+        });
+
+        async function loadVersion() {
+            try {
+                const res = await fetch("/api/version");
+                const d = await res.json();
+                document.getElementById("versionBadge").textContent = "v" + d.version;
+            } catch (e) {}
+        }
+
+        async function loadUsers() {
+            try {
+                const res = await fetch("/api/users");
+                allUsers = await res.json();
+                const sel = document.getElementById("filterUser");
+                allUsers.forEach(u => {
+                    sel.innerHTML += `<option value="${u.id}">${u.name}</option>`;
+                });
+            } catch (e) {}
+        }
+
+        async function loadBookings() {
+            const from = document.getElementById("filterFrom").value;
+            const to = document.getElementById("filterTo").value;
+            const type = document.getElementById("filterType").value;
+            const userId = document.getElementById("filterUser").value;
+
+            let url = "/api/bookings?";
+            if (from) url += `start=${from}&`;
+            if (to) url += `end=${to}&`;
+            if (userId) url += `user_id=${userId}&`;
+
+            try {
+                const res = await fetch(url);
+                let bookings = await res.json();
+
+                // Client-side type filter
+                if (type) {
+                    bookings = bookings.filter(b => b.booking_type === type);
+                }
+
+                allBookings = bookings;
+                renderTable(bookings);
+            } catch (e) {
+                allBookings = [];
+                renderTable([]);
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById("filterFrom").value = "";
+            document.getElementById("filterTo").value = "";
+            document.getElementById("filterType").value = "";
+            document.getElementById("filterUser").value = "";
+            loadBookings();
+        }
+
+        function renderTable(bookings) {
+            const container = document.getElementById("bookingsTable");
+            document.getElementById("resultsCount").textContent = `${bookings.length} booking${bookings.length !== 1 ? 's' : ''} found`;
+
+            if (!bookings.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No bookings found</h3>
+                        <p>Try adjusting your filters or create a new booking from the calendar.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Start</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Assigned To</th>
+                            <th>Company</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${bookings.map(b => {
+                            const start = new Date(b.start_datetime);
+                            const dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                            const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
+                            return `
+                                <tr style="cursor:pointer;" onclick="viewBooking('${b.id}')">
+                                    <td>${dateStr}</td>
+                                    <td>${timeStr}</td>
+                                    <td><strong>${b.title}</strong></td>
+                                    <td><span class="badge ${typeClass}">${b.booking_type}</span></td>
+                                    <td><span class="user-dot" style="background:${b.user_color || '#3788d8'}"></span>${b.user_name || ''}</td>
+                                    <td>${b.company_name || '-'}</td>
+                                    <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking('${b.id}')">View</button></td>
+                                </tr>`;
+                        }).join("")}
+                    </tbody>
+                </table>`;
+        }
+
+        function viewBooking(id) {
+            const b = allBookings.find(x => x.id === id);
+            if (!b) return;
+            currentBooking = b;
+            const start = new Date(b.start_datetime);
+            const end = new Date(b.end_datetime);
+            const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
+            document.getElementById("viewTitle").textContent = b.title;
+            document.getElementById("viewIcsLink").href = `/api/bookings/${b.id}/ics`;
+            document.getElementById("viewBody").innerHTML = `
+                <div class="field"><div class="field-label">Type</div><div class="field-value"><span class="badge ${typeClass}">${b.booking_type}</span></div></div>
+                <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
+                <div class="field"><div class="field-label">Assigned To</div><div class="field-value"><span class="user-dot" style="background:${b.user_color || '#3788d8'}"></span>${b.user_name || 'Unassigned'}</div></div>
+                ${b.company_name ? `<div class="field"><div class="field-label">Company</div><div class="field-value">${b.company_name}</div></div>` : ''}
+                ${b.contact_name ? `<div class="field"><div class="field-label">Contact</div><div class="field-value">${b.contact_name}${b.contact_email ? ' - ' + b.contact_email : ''}${b.contact_phone ? ' - ' + b.contact_phone : ''}</div></div>` : ''}
+                ${b.address ? `<div class="field"><div class="field-label">Address</div><div class="field-value">${b.address}</div></div>` : ''}
+                ${b.notes ? `<div class="field"><div class="field-label">Notes</div><div class="field-value">${b.notes}</div></div>` : ''}
+                ${b.hubspot_deal_id ? `<div class="field"><div class="field-label">HubSpot</div><div class="field-value"><a href="https://app.hubspot.com/contacts/deals/${b.hubspot_deal_id}" target="_blank" style="color:var(--primary)">View Deal</a></div></div>` : ''}
+            `;
+            document.getElementById("viewModal").classList.add("open");
+        }
+
+        function closeModal() {
+            document.getElementById("viewModal").classList.remove("open");
+            currentBooking = null;
+        }
+
+        async function deleteBooking() {
+            if (!currentBooking || !confirm("Delete this booking?")) return;
+            const res = await fetch(`/api/bookings/${currentBooking.id}`, { method: "DELETE" });
+            if (res.ok) {
+                closeModal();
+                loadBookings();
+            }
+        }
+
+        async function sendInvite() {
+            const b = currentBooking;
+            if (!b) return;
+            const email = b.contact_email || prompt("Enter email address:");
+            if (!email) return;
+            const res = await fetch(`/api/bookings/${b.id}/send-invite`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            if (data.ics_url) {
+                alert("SMTP not configured. Downloading ICS file instead.");
+                window.open(data.ics_url, "_blank");
+            } else {
+                alert(data.message || data.error);
+            }
+        }
+    </script>
+</body>
+</html>
