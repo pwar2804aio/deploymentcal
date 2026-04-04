@@ -13,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.7.0"
+VERSION = "2.7.1"
 
 app = Flask(__name__)
 
@@ -731,36 +731,42 @@ def create_booking():
 
     # Get specialist info for notes and emails
     cur2 = db.cursor()
-    cur2.execute("SELECT name, hubspot_owner_id FROM users WHERE id = %s", (data["user_id"],))
+    cur2.execute("SELECT name, email, hubspot_owner_id FROM users WHERE id = %s", (data["user_id"],))
     user = dict_one(cur2)
     cur2.close()
     specialist = user['name'] if user else 'Unknown'
 
-    # Collect HubSpot owner IDs to notify (specialist, creator, admin)
-    hubspot_owner_ids = set()
-    if user and user.get("hubspot_owner_id"):
-        hubspot_owner_ids.add(user["hubspot_owner_id"])
-    current = get_current_user()
-    if current:
-        cur3 = db.cursor()
-        cur3.execute("SELECT hubspot_owner_id FROM users WHERE id = %s", (current["id"],))
-        creator = dict_one(cur3)
-        cur3.close()
-        if creator and creator.get("hubspot_owner_id"):
-            hubspot_owner_ids.add(creator["hubspot_owner_id"])
-    # Admin owner ID from env
-    admin_hubspot_owner = os.environ.get("ADMIN_HUBSPOT_OWNER_ID", "")
-    if admin_hubspot_owner:
-        hubspot_owner_ids.add(admin_hubspot_owner)
-
     if HUBSPOT_API_KEY and data.get("hubspot_deal_id"):
         try:
             note_body, _, _ = build_booking_html(data, specialist)
+
+            # Build @mentions for notifications
+            mentions = []
+            mentioned_emails = set()
+
+            # Mention the specialist
+            if user and user.get("email"):
+                mentions.append(f'<a href="mailto:{user["email"]}" data-type="mention">@{user["name"]}</a>')
+                mentioned_emails.add(user["email"])
+
+            # Mention the person making the booking
+            current = get_current_user()
+            if current and current.get("email") and current["email"] not in mentioned_emails:
+                mentions.append(f'<a href="mailto:{current["email"]}" data-type="mention">@{current["name"]}</a>')
+                mentioned_emails.add(current["email"])
+
+            # Mention admin always
+            if ADMIN_EMAIL and ADMIN_EMAIL not in mentioned_emails:
+                mentions.append(f'<a href="mailto:{ADMIN_EMAIL}" data-type="mention">@Admin</a>')
+
+            if mentions:
+                note_body += "<br><br>" + " ".join(mentions)
+
             note_props = {
                 "hs_note_body": note_body,
                 "hs_timestamp": datetime.utcnow().isoformat() + "Z",
             }
-            # Assign note to specialist's HubSpot owner for notification
+            # Assign note to specialist's HubSpot owner
             if user and user.get("hubspot_owner_id"):
                 note_props["hubspot_owner_id"] = user["hubspot_owner_id"]
 
@@ -781,28 +787,6 @@ def create_booking():
                         "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 190}],
                     }],
                 })
-
-            # Create task notifications for all other owners
-            for owner_id in hubspot_owner_ids:
-                if user and owner_id == user.get("hubspot_owner_id"):
-                    continue  # Already notified via note ownership
-                try:
-                    formatted_date, _ = format_booking_date(data)
-                    hubspot_request("POST", "/crm/v3/objects/tasks", {
-                        "properties": {
-                            "hs_task_subject": f"Deployment Booked: {data.get('title', '')} - {formatted_date}",
-                            "hs_task_body": note_body,
-                            "hubspot_owner_id": owner_id,
-                            "hs_task_status": "COMPLETED",
-                            "hs_timestamp": datetime.utcnow().isoformat() + "Z",
-                        },
-                        "associations": [{
-                            "to": {"id": int(data["hubspot_deal_id"])},
-                            "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 216}],
-                        }],
-                    })
-                except Exception:
-                    pass
 
             result["hubspot_note"] = "sent"
         except Exception as e:
