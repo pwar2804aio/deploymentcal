@@ -4,6 +4,7 @@ import uuid
 import hashlib
 import secrets
 import base64
+import random
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 from functools import wraps
@@ -13,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.7.1"
+VERSION = "2.7.2"
 
 app = Flask(__name__)
 
@@ -656,9 +657,10 @@ def round_robin():
     counts = {row[0]: row[1] for row in cur.fetchall()}
     cur.close()
 
-    # Sort by booking count (fewest first)
-    available_users.sort(key=lambda u: counts.get(u["id"], 0))
-    chosen = available_users[0]
+    # Find users tied for fewest bookings and pick randomly
+    min_count = min(counts.get(u["id"], 0) for u in available_users)
+    tied_users = [u for u in available_users if counts.get(u["id"], 0) == min_count]
+    chosen = random.choice(tied_users)
 
     # Get the chosen user's availability hours for this day
     cur2 = db.cursor()
