@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 app = Flask(__name__)
 
@@ -252,7 +252,7 @@ def create_user():
     cur = db.cursor()
     cur.execute(
         "INSERT INTO users (id, name, email, role, color) VALUES (%s, %s, %s, %s, %s)",
-        (uid, data["name"], data["email"], data.get("role", "installer"), data.get("color", "#3788d8")),
+        (uid, data["name"], data["email"], data.get("role", "deployment_specialist"), data.get("color", "#3788d8")),
     )
     db.commit()
     cur.close()
@@ -266,7 +266,7 @@ def update_user(uid):
     cur = db.cursor()
     cur.execute(
         "UPDATE users SET name=%s, email=%s, role=%s, color=%s, active=%s WHERE id=%s",
-        (data["name"], data["email"], data.get("role", "installer"), data.get("color", "#3788d8"), data.get("active", 1), uid),
+        (data["name"], data["email"], data.get("role", "deployment_specialist"), data.get("color", "#3788d8"), data.get("active", 1), uid),
     )
     db.commit()
     cur.close()

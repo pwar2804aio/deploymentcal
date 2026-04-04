@@ -294,10 +294,9 @@
                 <div class="form-row">
                     <label>Role</label>
                     <select id="userRole">
-                        <option value="installer">Installer</option>
-                        <option value="trainer">Trainer</option>
-                        <option value="lead">Lead</option>
+                        <option value="deployment_specialist">Deployment Specialist</option>
                         <option value="manager">Manager</option>
+                        <option value="aio_buddy">AIO Buddy</option>
                     </select>
                 </div>
                 <div class="form-row">
@@ -343,6 +342,11 @@
             populateSelects();
         }
 
+        function formatRole(role) {
+            const map = { deployment_specialist: 'Deployment Specialist', manager: 'Manager', aio_buddy: 'AIO Buddy', installer: 'Installer', trainer: 'Trainer', lead: 'Lead' };
+            return map[role] || role;
+        }
+
         function renderUsersTable() {
             const tbody = document.getElementById("usersTableBody");
             if (!users.length) {
@@ -354,7 +358,7 @@
                     <td><span class="color-dot" style="background:${u.color}"></span></td>
                     <td>${u.name}</td>
                     <td>${u.email}</td>
-                    <td><span class="role-badge">${u.role}</span></td>
+                    <td><span class="role-badge">${formatRole(u.role)}</span></td>
                     <td>
                         <button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>
                         <button class="btn btn-danger btn-sm" onclick="removeUser('${u.id}')">Remove</button>
@@ -385,7 +389,7 @@
                 document.getElementById("editUserId").value = "";
                 document.getElementById("userName").value = "";
                 document.getElementById("userEmail").value = "";
-                document.getElementById("userRole").value = "installer";
+                document.getElementById("userRole").value = "deployment_specialist";
                 document.getElementById("userColor").value = "#3788d8";
             }
             modal.classList.add("open");
