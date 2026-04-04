@@ -367,8 +367,7 @@
             const opts = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
             document.getElementById("availUser").innerHTML = opts;
             document.getElementById("timeoffUser").innerHTML = opts;
-            // Pre-render availability grid for first user
-            if (users.length) loadAvailability();
+            renderAvailGrid(null);
         }
 
         function openUserModal(userId) {
@@ -440,16 +439,11 @@
 
         const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-        async function loadAvailability() {
-            const uid = document.getElementById("availUser").value;
-            if (!uid) return;
-
-            const res = await fetch(`/api/users/${uid}/availability`);
-            const avail = await res.json();
-
+        function renderAvailGrid(avail) {
             const grid = document.getElementById("availGrid");
             grid.innerHTML = DAYS.map((day, i) => {
-                const slot = avail.find(a => a.day_of_week === i);
+                const slot = avail ? avail.find(a => a.day_of_week === i) : null;
+                const checked = slot ? 'checked' : ((!avail && i < 5) ? 'checked' : '');
                 return `
                     <div class="avail-day">
                         <div class="day-name">${day.slice(0, 3)}</div>
@@ -458,7 +452,7 @@
                         <div class="avail-label">End</div>
                         <input type="time" id="avail-end-${i}" value="${slot ? slot.end_time : '17:00'}">
                         <label style="margin-top:6px;font-size:12px;">
-                            <input type="checkbox" id="avail-active-${i}" ${slot || i < 5 ? 'checked' : ''}>
+                            <input type="checkbox" id="avail-active-${i}" ${checked}>
                             Available
                         </label>
                     </div>
@@ -466,9 +460,35 @@
             }).join("");
         }
 
+        async function loadAvailability() {
+            const uid = document.getElementById("availUser").value;
+            if (!uid) {
+                renderAvailGrid(null);
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/users/${uid}/availability`);
+                const avail = await res.json();
+                renderAvailGrid(avail);
+            } catch (e) {
+                renderAvailGrid(null);
+            }
+        }
+
         async function saveAvailability() {
             const uid = document.getElementById("availUser").value;
-            if (!uid) return;
+            if (!uid) {
+                alert("Please select a team member first.");
+                return;
+            }
+
+            // Check grid elements exist
+            const activeEl = document.getElementById("avail-active-0");
+            if (!activeEl) {
+                alert("Please wait for availability to load, then try again.");
+                return;
+            }
 
             const slots = [];
             for (let i = 0; i < 7; i++) {
@@ -482,16 +502,21 @@
                 }
             }
 
-            const res = await fetch(`/api/users/${uid}/availability`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(slots),
-            });
+            try {
+                const res = await fetch(`/api/users/${uid}/availability`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(slots),
+                });
 
-            if (res.ok) {
-                alert("Availability saved!");
-            } else {
-                alert("Failed to save availability.");
+                if (res.ok) {
+                    alert("Availability saved!");
+                } else {
+                    const err = await res.text();
+                    alert("Failed to save availability: " + err);
+                }
+            } catch (e) {
+                alert("Error saving availability: " + e.message);
             }
         }
 
@@ -553,8 +578,8 @@
             loadTimeOff();
         }
 
-        // Init availability grid on load
-        setTimeout(() => { if (users.length) loadAvailability(); }, 500);
+        // Init availability grid immediately
+        renderAvailGrid(null);
     </script>
 </body>
 </html>

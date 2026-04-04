@@ -455,6 +455,9 @@
             const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
             const today = new Date();
             today.setHours(0,0,0,0);
+            // Minimum 24 hours: earliest bookable date is day after tomorrow
+            const minDate = new Date(today);
+            minDate.setDate(minDate.getDate() + 2);
 
             // Previous month padding
             const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
@@ -465,12 +468,12 @@
             // Current month days
             for (let d = 1; d <= daysInMonth; d++) {
                 const date = new Date(viewYear, viewMonth, d);
-                const isPast = date < today;
+                const isTooSoon = date < minDate;
                 const isToday = date.getTime() === today.getTime();
                 const isSelected = selectedDate && date.getTime() === selectedDate.getTime();
 
                 let cls = "day";
-                if (isPast) cls += " past";
+                if (isTooSoon) cls += " past";
                 if (isToday) cls += " today";
                 if (isSelected) cls += " selected";
 
