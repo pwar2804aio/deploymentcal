@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 
 app = Flask(__name__)
 
@@ -27,9 +27,6 @@ HUBSPOT_API_KEY = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
-
-# HubSpot Webhook trigger URL for notifications
-HUBSPOT_WEBHOOK_URL = os.environ.get("HUBSPOT_WEBHOOK_URL", "")
 
 DEAL_STAGES = {
     "2986384063": "Install/Training",
@@ -334,36 +331,6 @@ def hubspot_request(method, endpoint, data=None):
     resp = requests.request(method, url, headers=headers, json=data, timeout=15)
     resp.raise_for_status()
     return resp.json()
-
-
-def fire_hubspot_webhook(booking_data, specialist_name, cancelled=False):
-    """Fire HubSpot workflow webhook to trigger notifications."""
-    if not HUBSPOT_WEBHOOK_URL:
-        return
-    try:
-        formatted_date, start_time = format_booking_date(booking_data)
-        current = get_current_user()
-        payload = {
-            "status": "CANCELLED" if cancelled else "Confirmed",
-            "company_name": booking_data.get("company_name", "N/A"),
-            "deal_stage": booking_data.get("deal_stage", "N/A"),
-            "date": formatted_date,
-            "start_time": start_time,
-            "specialist": specialist_name,
-            "booked_by": current["name"] if current else "Unknown",
-            "booked_by_email": current["email"] if current else "",
-            "contact_name": booking_data.get("contact_name", "N/A"),
-            "contact_email": booking_data.get("contact_email", "N/A"),
-            "contact_phone": booking_data.get("contact_phone", "N/A"),
-            "address": booking_data.get("address", "N/A"),
-            "notes": booking_data.get("notes", ""),
-            "hubspot_deal_id": booking_data.get("hubspot_deal_id", ""),
-            "hubspot_company_id": booking_data.get("hubspot_company_id", ""),
-            "title": booking_data.get("title", ""),
-        }
-        requests.post(HUBSPOT_WEBHOOK_URL, json=payload, timeout=10)
-    except Exception:
-        pass  # Don't fail the booking if webhook fails
 
 
 @app.route("/api/hubspot/deals")
@@ -827,9 +794,6 @@ def create_booking():
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
 
-    # Fire HubSpot webhook for workflow notifications
-    fire_hubspot_webhook(data, specialist)
-
     if SENDGRID_API_KEY:
         try:
             send_booking_email(bid, data, db)
@@ -866,26 +830,13 @@ def update_booking(bid):
     cur.close()
 
     result = {"ok": True}
-
-    # Get specialist name for webhook
-    specialist = "Unknown"
-    if data.get("user_id"):
-        cur2 = db.cursor()
-        cur2.execute("SELECT name FROM users WHERE id = %s", (data["user_id"],))
-        row = dict_one(cur2)
-        cur2.close()
-        if row:
-            specialist = row["name"]
-
-    # Send cancellation email and webhook
-    if data.get("status") == "cancelled":
-        fire_hubspot_webhook(data, specialist, cancelled=True)
-        if SENDGRID_API_KEY:
-            try:
-                send_booking_email(bid, data, db, cancelled=True)
-                result["email_sent"] = "sent"
-            except Exception as e:
-                result["email_sent"] = f"error: {str(e)}"
+    # Send cancellation email
+    if data.get("status") == "cancelled" and SENDGRID_API_KEY:
+        try:
+            send_booking_email(bid, data, db, cancelled=True)
+            result["email_sent"] = "sent"
+        except Exception as e:
+            result["email_sent"] = f"error: {str(e)}"
 
     return jsonify(result)
 
