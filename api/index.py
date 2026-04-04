@@ -13,7 +13,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 
 app = Flask(__name__)
 
@@ -22,9 +22,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 # HubSpot config
 HUBSPOT_API_KEY = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
 
-# Resend config
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM = os.environ.get("EMAIL_FROM", "deployments@resend.dev")
+# SendGrid config
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 
 DEAL_STAGES = {
@@ -728,14 +728,14 @@ def create_booking():
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
 
-    if RESEND_API_KEY:
+    if SENDGRID_API_KEY:
         try:
             send_booking_email(bid, data, db)
             result["email_sent"] = "sent"
         except Exception as e:
             result["email_sent"] = f"error: {str(e)}"
     else:
-        result["email_sent"] = "Resend not configured"
+        result["email_sent"] = "SendGrid not configured"
 
     return jsonify(result), 201
 
@@ -765,7 +765,7 @@ def update_booking(bid):
 
     result = {"ok": True}
     # Send cancellation email
-    if data.get("status") == "cancelled" and RESEND_API_KEY:
+    if data.get("status") == "cancelled" and SENDGRID_API_KEY:
         try:
             send_booking_email(bid, data, db, cancelled=True)
             result["email_sent"] = "sent"
@@ -856,7 +856,7 @@ def format_booking_date(booking_data):
 
 
 def send_booking_email(booking_id, booking_data, db, cancelled=False):
-    if not RESEND_API_KEY:
+    if not SENDGRID_API_KEY:
         return
     recipients = get_booking_recipients(booking_data, db)
     if not recipients:
@@ -898,27 +898,31 @@ def send_booking_email(booking_id, booking_data, db, cancelled=False):
 
     subject = f"Deployment {status}: {booking_data.get('title', '')} - {formatted_date} ({specialist})"
 
-    email_payload = {
-        "from": EMAIL_FROM,
-        "to": recipients,
+    # Build SendGrid personalizations (one per recipient)
+    personalizations = [{"to": [{"email": r}]} for r in recipients]
+
+    sg_payload = {
+        "personalizations": personalizations,
+        "from": {"email": EMAIL_FROM},
         "subject": subject,
-        "html": html_body,
+        "content": [{"type": "text/html", "value": html_body}],
     }
 
     # Attach ICS for confirmed bookings
     if not cancelled:
         ics_content = generate_ics(booking_data, booking_id)
         ics_b64 = base64.b64encode(ics_content.encode("utf-8")).decode("utf-8")
-        email_payload["attachments"] = [{
-            "filename": "invite.ics",
+        sg_payload["attachments"] = [{
             "content": ics_b64,
-            "content_type": "text/calendar",
+            "filename": "invite.ics",
+            "type": "text/calendar",
+            "disposition": "attachment",
         }]
 
     resp = requests.post(
-        "https://api.resend.com/emails",
-        headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-        json=email_payload,
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+        json=sg_payload,
     )
     resp.raise_for_status()
 
@@ -933,8 +937,8 @@ def send_invite(bid):
     cur.close()
     if not row:
         return jsonify({"error": "Booking not found"}), 404
-    if not RESEND_API_KEY:
-        return jsonify({"message": "Resend not configured. Use the ICS download link instead.", "ics_url": f"/api/bookings/{bid}/ics"})
+    if not SENDGRID_API_KEY:
+        return jsonify({"message": "SendGrid not configured. Use the ICS download link instead.", "ics_url": f"/api/bookings/{bid}/ics"})
     try:
         send_booking_email(bid, row, db)
         return jsonify({"message": "Booking email sent to team"})
