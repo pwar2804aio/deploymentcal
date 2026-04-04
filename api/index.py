@@ -1,6 +1,8 @@
 import os
 import json
 import uuid
+import hashlib
+import secrets
 import smtplib
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
@@ -8,13 +10,14 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from contextlib import contextmanager
+from functools import wraps
 
 import psycopg2
 import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 
 app = Flask(__name__)
 
@@ -111,8 +114,66 @@ def init_db(conn):
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+    """)
+    # Add password column if not exists
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE users ADD COLUMN password_hash TEXT;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
     conn.commit()
     cur.close()
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def get_current_user():
+    token = request.cookies.get("session_token") or request.headers.get("X-Session-Token")
+    if not token:
+        return None
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT u.id, u.name, u.email, u.role, u.color
+        FROM sessions s JOIN users u ON s.user_id = u.id
+        WHERE s.token = %s AND u.active = 1
+    """, (token,))
+    user = dict_one(cur)
+    cur.close()
+    return user
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return jsonify({"error": "Not authenticated"}), 401
+        g.current_user = user
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return jsonify({"error": "Not authenticated"}), 401
+        if user["role"] != "manager":
+            return jsonify({"error": "Admin access required"}), 403
+        g.current_user = user
+        return f(*args, **kwargs)
+    return decorated
 
 
 def dict_row(cursor):
@@ -135,6 +196,108 @@ def get_version():
     return jsonify({"version": VERSION})
 
 
+# ── Auth API ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/auth/login", methods=["POST"])
+def login():
+    data = request.json
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT id, name, email, role, color, password_hash FROM users WHERE LOWER(email) = %s AND active = 1", (email,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    columns = ["id", "name", "email", "role", "color", "password_hash"]
+    user = dict(zip(columns, row))
+
+    if not user["password_hash"]:
+        cur.close()
+        return jsonify({"error": "Password not set. Ask an admin to set your password."}), 401
+
+    if user["password_hash"] != hash_password(password):
+        cur.close()
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    token = secrets.token_hex(32)
+    cur.execute("INSERT INTO sessions (token, user_id) VALUES (%s, %s)", (token, user["id"]))
+    db.commit()
+    cur.close()
+
+    resp = jsonify({"user": {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"], "color": user["color"]}, "token": token})
+    resp.set_cookie("session_token", token, httponly=True, samesite="Lax", max_age=60*60*24*30)
+    return resp
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout():
+    token = request.cookies.get("session_token") or request.headers.get("X-Session-Token")
+    if token:
+        db = get_db()
+        cur = db.cursor()
+        cur.execute("DELETE FROM sessions WHERE token = %s", (token,))
+        db.commit()
+        cur.close()
+    resp = jsonify({"ok": True})
+    resp.delete_cookie("session_token")
+    return resp
+
+
+@app.route("/api/auth/me")
+def auth_me():
+    user = get_current_user()
+    if not user:
+        return jsonify({"user": None}), 401
+    return jsonify({"user": user})
+
+
+@app.route("/api/auth/setup", methods=["POST"])
+def auth_setup():
+    """One-time setup: create admin account if no managers exist."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT id FROM users WHERE role = 'manager' AND active = 1")
+    if cur.fetchone():
+        cur.close()
+        return jsonify({"error": "Admin already exists. Use the admin panel to manage users."}), 400
+    data = request.json
+    name = data.get("name", "").strip()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password", "")
+    if not name or not email or len(password) < 4:
+        cur.close()
+        return jsonify({"error": "Name, email, and password (4+ chars) required"}), 400
+    uid = str(uuid.uuid4())
+    cur.execute(
+        "INSERT INTO users (id, name, email, role, color, password_hash) VALUES (%s, %s, %s, %s, %s, %s)",
+        (uid, name, email, "manager", "#3788d8", hash_password(password)),
+    )
+    db.commit()
+    cur.close()
+    return jsonify({"ok": True, "message": f"Admin account created for {email}. You can now log in."}), 201
+
+
+@app.route("/api/users/<uid>/set-password", methods=["POST"])
+@require_admin
+def set_user_password(uid):
+    data = request.json
+    password = data.get("password", "")
+    if len(password) < 4:
+        return jsonify({"error": "Password must be at least 4 characters"}), 400
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(password), uid))
+    db.commit()
+    cur.close()
+    return jsonify({"ok": True})
+
+
 # ── HubSpot API ──────────────────────────────────────────────────────────────
 
 def hubspot_request(method, endpoint, data=None):
@@ -151,6 +314,7 @@ def hubspot_request(method, endpoint, data=None):
 
 
 @app.route("/api/hubspot/deals")
+@require_auth
 def get_hubspot_deals():
     if not HUBSPOT_API_KEY:
         return jsonify({"error": "HubSpot API key not configured"}), 400
@@ -186,6 +350,7 @@ def get_hubspot_deals():
 
 
 @app.route("/api/hubspot/deals/<deal_id>/company")
+@require_auth
 def get_deal_company(deal_id):
     if not HUBSPOT_API_KEY:
         return jsonify({"error": "HubSpot API key not configured"}), 400
@@ -212,6 +377,7 @@ def get_deal_company(deal_id):
 
 
 @app.route("/api/hubspot/deals/<deal_id>/contacts")
+@require_auth
 def get_deal_contacts(deal_id):
     if not HUBSPOT_API_KEY:
         return jsonify({"error": "HubSpot API key not configured"}), 400
@@ -235,6 +401,7 @@ def get_deal_contacts(deal_id):
 # ── Users API ─────────────────────────────────────────────────────────────────
 
 @app.route("/api/users", methods=["GET"])
+@require_auth
 def list_users():
     db = get_db()
     cur = db.cursor()
@@ -245,6 +412,7 @@ def list_users():
 
 
 @app.route("/api/users", methods=["POST"])
+@require_admin
 def create_user():
     data = request.json
     uid = str(uuid.uuid4())
@@ -260,6 +428,7 @@ def create_user():
 
 
 @app.route("/api/users/<uid>", methods=["PUT"])
+@require_admin
 def update_user(uid):
     data = request.json
     db = get_db()
@@ -274,6 +443,7 @@ def update_user(uid):
 
 
 @app.route("/api/users/<uid>", methods=["DELETE"])
+@require_admin
 def delete_user(uid):
     db = get_db()
     cur = db.cursor()
@@ -286,6 +456,7 @@ def delete_user(uid):
 # ── Availability API ──────────────────────────────────────────────────────────
 
 @app.route("/api/users/<uid>/availability", methods=["GET"])
+@require_auth
 def get_availability(uid):
     db = get_db()
     cur = db.cursor()
@@ -296,6 +467,7 @@ def get_availability(uid):
 
 
 @app.route("/api/users/<uid>/availability", methods=["PUT"])
+@require_admin
 def set_availability(uid):
     data = request.json
     db = get_db()
@@ -314,6 +486,7 @@ def set_availability(uid):
 # ── Time Off API ──────────────────────────────────────────────────────────────
 
 @app.route("/api/users/<uid>/timeoff", methods=["GET"])
+@require_auth
 def get_timeoff(uid):
     db = get_db()
     cur = db.cursor()
@@ -324,6 +497,7 @@ def get_timeoff(uid):
 
 
 @app.route("/api/users/<uid>/timeoff", methods=["POST"])
+@require_admin
 def add_timeoff(uid):
     data = request.json
     tid = str(uuid.uuid4())
@@ -339,6 +513,7 @@ def add_timeoff(uid):
 
 
 @app.route("/api/users/<uid>/timeoff/<tid>", methods=["DELETE"])
+@require_admin
 def delete_timeoff(uid, tid):
     db = get_db()
     cur = db.cursor()
@@ -351,6 +526,7 @@ def delete_timeoff(uid, tid):
 # ── Round Robin Assignment ─────────��─────────────────────────────────────────
 
 @app.route("/api/available-days")
+@require_auth
 def available_days():
     """Return which days of week (0=Mon..6=Sun) have at least one available user."""
     db = get_db()
@@ -368,6 +544,7 @@ def available_days():
 
 
 @app.route("/api/round-robin")
+@require_auth
 def round_robin():
     date_str = request.args.get("date")  # YYYY-MM-DD
     if not date_str:
@@ -450,6 +627,7 @@ def round_robin():
 # ── Bookings API ──────────────────────────────────────────────────────────────
 
 @app.route("/api/bookings", methods=["GET"])
+@require_auth
 def list_bookings():
     db = get_db()
     cur = db.cursor()
@@ -475,6 +653,7 @@ def list_bookings():
 
 
 @app.route("/api/bookings", methods=["POST"])
+@require_auth
 def create_booking():
     data = request.json
     bid = str(uuid.uuid4())
@@ -546,6 +725,7 @@ def create_booking():
 
 
 @app.route("/api/bookings/<bid>", methods=["PUT"])
+@require_auth
 def update_booking(bid):
     data = request.json
     db = get_db()
@@ -570,6 +750,7 @@ def update_booking(bid):
 
 
 @app.route("/api/bookings/<bid>", methods=["DELETE"])
+@require_admin
 def delete_booking(bid):
     db = get_db()
     cur = db.cursor()
@@ -651,6 +832,7 @@ def send_calendar_invite(booking_id, booking_data):
 
 
 @app.route("/api/bookings/<bid>/send-invite", methods=["POST"])
+@require_auth
 def send_invite(bid):
     db = get_db()
     cur = db.cursor()

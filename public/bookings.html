@@ -115,6 +115,7 @@
             <a href="/">Calendar</a>
             <a href="/bookings" class="active">Bookings</a>
             <a href="/admin">Admin</a>
+            <a href="#" onclick="doLogout()" style="color:rgba(255,255,255,0.5);">Logout</a>
         </nav>
     </div>
 
@@ -174,15 +175,28 @@
         let allBookings = [];
         let allUsers = [];
         let currentBooking = null;
+        let currentUser = null;
 
         document.addEventListener("DOMContentLoaded", async () => {
+            try {
+                const authRes = await fetch("/api/auth/me");
+                if (!authRes.ok) { window.location.href = "/login"; return; }
+                const authData = await authRes.json();
+                if (!authData.user) { window.location.href = "/login"; return; }
+                currentUser = authData.user;
+            } catch (e) { window.location.href = "/login"; return; }
+
             await loadUsers();
-            // Default: show bookings from today onwards
             const today = new Date().toISOString().slice(0, 10);
             document.getElementById("filterFrom").value = today;
             loadBookings();
             loadVersion();
         });
+
+        async function doLogout() {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+        }
 
         async function loadVersion() {
             try {

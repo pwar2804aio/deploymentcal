@@ -16,6 +16,10 @@
       "dest": "api/index.py"
     },
     {
+      "src": "/login",
+      "dest": "public/login.html"
+    },
+    {
       "src": "/admin",
       "dest": "public/admin.html"
     },

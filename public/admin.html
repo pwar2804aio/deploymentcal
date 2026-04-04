@@ -195,6 +195,7 @@
             <a href="/">Calendar</a>
             <a href="/bookings">Bookings</a>
             <a href="/admin" class="active">Admin</a>
+            <a href="#" onclick="doLogout()" style="color:rgba(255,255,255,0.5);">Logout</a>
         </nav>
     </div>
 
@@ -314,12 +315,30 @@
     <script>
         let users = [];
 
-        document.addEventListener("DOMContentLoaded", () => {
+        document.addEventListener("DOMContentLoaded", async () => {
+            // Auth check - admin only
+            try {
+                const authRes = await fetch("/api/auth/me");
+                if (!authRes.ok) { window.location.href = "/login"; return; }
+                const authData = await authRes.json();
+                if (!authData.user) { window.location.href = "/login"; return; }
+                if (authData.user.role !== "manager") {
+                    alert("Admin access restricted to Managers only.");
+                    window.location.href = "/";
+                    return;
+                }
+            } catch (e) { window.location.href = "/login"; return; }
+
             loadUsers();
             fetch("/api/version").then(r => r.json()).then(d => {
                 document.getElementById("versionBadge").textContent = "v" + d.version;
             }).catch(() => {});
         });
+
+        async function doLogout() {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+        }
 
         // ── Tabs ──
 
@@ -361,6 +380,7 @@
                     <td><span class="role-badge">${formatRole(u.role)}</span></td>
                     <td>
                         <button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>
+                        <button class="btn btn-primary btn-sm" onclick="setPassword('${u.id}', '${u.name}')">Set Password</button>
                         <button class="btn btn-danger btn-sm" onclick="removeUser('${u.id}')">Remove</button>
                     </td>
                 </tr>
@@ -437,6 +457,23 @@
             if (!confirm("Remove this team member?")) return;
             await fetch(`/api/users/${id}`, { method: "DELETE" });
             loadUsers();
+        }
+
+        async function setPassword(uid, name) {
+            const pw = prompt(`Set password for ${name}:`);
+            if (!pw) return;
+            if (pw.length < 4) { alert("Password must be at least 4 characters."); return; }
+            const res = await fetch(`/api/users/${uid}/set-password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password: pw }),
+            });
+            if (res.ok) {
+                alert(`Password set for ${name}.`);
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to set password.");
+            }
         }
 
         // ── Availability ──

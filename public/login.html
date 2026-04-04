@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Deployment Bookings</title>
+    <style>
+        :root {
+            --primary: #ff5c35;
+            --primary-dark: #e8481e;
+            --nav-bg: #1b2a4a;
+            --bg: #f5f8fa;
+            --card: #ffffff;
+            --border: #e5e8ed;
+            --text: #1a1f36;
+            --text-muted: #6b7c93;
+            --danger: #e8481e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--nav-bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .login-card {
+            background: var(--card);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 380px;
+            padding: 40px;
+        }
+        .login-logo { text-align: center; margin-bottom: 24px; }
+        .login-logo img { height: 40px; }
+        .login-title { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+        .login-sub { text-align: center; font-size: 14px; color: var(--text-muted); margin-bottom: 28px; }
+        .form-row { margin-bottom: 16px; }
+        .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .form-row input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+        }
+        .form-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(255,92,53,0.1); }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--primary);
+            color: white;
+            margin-top: 8px;
+        }
+        .btn:hover { background: var(--primary-dark); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .error-msg {
+            background: #fee2e2;
+            color: #991b1b;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .error-msg.show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-logo">
+            <img src="/aio-logo.png" alt="">
+        </div>
+        <div class="login-title">Deployment Bookings</div>
+        <div class="login-sub">Sign in to continue</div>
+
+        <div class="error-msg" id="errorMsg"></div>
+
+        <form onsubmit="doLogin(event)">
+            <div class="form-row">
+                <label>Email</label>
+                <input type="email" id="loginEmail" required placeholder="you@company.com" autofocus>
+            </div>
+            <div class="form-row">
+                <label>Password</label>
+                <input type="password" id="loginPassword" required placeholder="Enter your password">
+            </div>
+            <button type="submit" class="btn" id="loginBtn">Sign In</button>
+        </form>
+    </div>
+
+    <script>
+        // If already logged in, redirect
+        (async () => {
+            try {
+                const res = await fetch("/api/auth/me");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.user) window.location.href = "/";
+                }
+            } catch (e) {}
+        })();
+
+        async function doLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById("loginBtn");
+            const errEl = document.getElementById("errorMsg");
+            btn.disabled = true;
+            errEl.classList.remove("show");
+
+            const email = document.getElementById("loginEmail").value;
+            const password = document.getElementById("loginPassword").value;
+
+            try {
+                const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    window.location.href = "/";
+                } else {
+                    errEl.textContent = data.error || "Login failed";
+                    errEl.classList.add("show");
+                }
+            } catch (err) {
+                errEl.textContent = "Connection error. Please try again.";
+                errEl.classList.add("show");
+            }
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>

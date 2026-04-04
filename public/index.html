@@ -223,6 +223,7 @@
             <a href="/" class="active">Calendar</a>
             <a href="/bookings">Bookings</a>
             <a href="/admin">Admin</a>
+            <a href="#" onclick="doLogout()" style="color:rgba(255,255,255,0.5);">Logout</a>
         </nav>
     </div>
 
@@ -376,8 +377,19 @@
         let existingBookings = [];
         let availableDays = []; // days of week with available users (0=Mon..6=Sun)
 
+        let currentUser = null;
+
         // ── Init ──
         document.addEventListener("DOMContentLoaded", async () => {
+            // Auth check
+            try {
+                const authRes = await fetch("/api/auth/me");
+                if (!authRes.ok) { window.location.href = "/login"; return; }
+                const authData = await authRes.json();
+                if (!authData.user) { window.location.href = "/login"; return; }
+                currentUser = authData.user;
+            } catch (e) { window.location.href = "/login"; return; }
+
             const now = new Date();
             viewYear = now.getFullYear();
             viewMonth = now.getMonth();
@@ -387,6 +399,11 @@
             loadDeals();
             loadVersion();
         });
+
+        async function doLogout() {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+        }
 
         async function loadAvailableDays() {
             try {
