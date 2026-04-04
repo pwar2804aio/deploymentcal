@@ -304,6 +304,12 @@
                     <label>Calendar Color</label>
                     <input type="color" id="userColor" value="#3788d8">
                 </div>
+                <div class="form-row">
+                    <label>HubSpot Owner</label>
+                    <select id="userHubspotOwner">
+                        <option value="">-- None --</option>
+                    </select>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-ghost" onclick="closeUserModal()">Cancel</button>
@@ -314,6 +320,7 @@
 
     <script>
         let users = [];
+        let hubspotOwners = [];
 
         document.addEventListener("DOMContentLoaded", async () => {
             // Auth check - admin only
@@ -330,6 +337,7 @@
             } catch (e) { window.location.href = "/login"; return; }
 
             loadUsers();
+            loadHubspotOwners();
             fetch("/api/version").then(r => r.json()).then(d => {
                 document.getElementById("versionBadge").textContent = "v" + d.version;
             }).catch(() => {});
@@ -350,6 +358,16 @@
 
             if (name === "availability") loadAvailability();
             if (name === "timeoff") loadTimeOff();
+        }
+
+        async function loadHubspotOwners() {
+            try {
+                const res = await fetch("/api/hubspot/owners");
+                hubspotOwners = await res.json();
+                const sel = document.getElementById("userHubspotOwner");
+                sel.innerHTML = '<option value="">-- None --</option>' +
+                    hubspotOwners.map(o => `<option value="${o.id}">${o.name} (${o.email})</option>`).join("");
+            } catch (e) {}
         }
 
         // ── Users ──
@@ -404,6 +422,7 @@
                 document.getElementById("userEmail").value = u.email;
                 document.getElementById("userRole").value = u.role;
                 document.getElementById("userColor").value = u.color;
+                document.getElementById("userHubspotOwner").value = u.hubspot_owner_id || "";
             } else {
                 document.getElementById("userModalTitle").textContent = "Add Team Member";
                 document.getElementById("editUserId").value = "";
@@ -411,6 +430,7 @@
                 document.getElementById("userEmail").value = "";
                 document.getElementById("userRole").value = "deployment_specialist";
                 document.getElementById("userColor").value = "#3788d8";
+                document.getElementById("userHubspotOwner").value = "";
             }
             modal.classList.add("open");
         }
@@ -430,6 +450,7 @@
                 email: document.getElementById("userEmail").value,
                 role: document.getElementById("userRole").value,
                 color: document.getElementById("userColor").value,
+                hubspot_owner_id: document.getElementById("userHubspotOwner").value || null,
             };
             if (!data.name || !data.email) {
                 alert("Name and email are required.");
