@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.8.1"
+VERSION = "2.8.2"
 
 app = Flask(__name__)
 
@@ -878,6 +878,119 @@ def delete_booking(bid):
     db.commit()
     cur.close()
     return jsonify({"ok": True})
+
+
+# ── Complete Deployment ───────────────────────────────────────────────────────
+
+@app.route("/api/bookings/<bid>/complete", methods=["POST"])
+@require_auth
+def complete_booking(bid):
+    data = request.json
+    db = get_db()
+    cur = db.cursor()
+
+    # Get existing booking
+    cur.execute("SELECT * FROM bookings WHERE id = %s", (bid,))
+    booking = dict_one(cur)
+    if not booking:
+        cur.close()
+        return jsonify({"error": "Booking not found"}), 404
+
+    # Update status to completed
+    cur.execute("UPDATE bookings SET status = 'completed' WHERE id = %s", (bid,))
+    db.commit()
+    cur.close()
+
+    result = {"ok": True}
+
+    # Get specialist info
+    specialist = "Unknown"
+    user = None
+    if booking.get("user_id"):
+        cur2 = db.cursor()
+        cur2.execute("SELECT name, email, hubspot_owner_id FROM users WHERE id = %s", (booking["user_id"],))
+        user = dict_one(cur2)
+        cur2.close()
+        if user:
+            specialist = user["name"]
+
+    current = get_current_user()
+
+    if HUBSPOT_API_KEY and booking.get("hubspot_deal_id"):
+        try:
+            formatted_date, start_time = format_booking_date(booking)
+            # Build completion note HTML
+            note_body = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #16a34a;">✅ Deployment Completed</h2>
+                </div>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 180px;">Company:</td><td style="padding: 8px;">{booking.get('company_name', 'N/A')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Deployment Date:</td><td style="padding: 8px;">{formatted_date}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Deployment Specialist:</td><td style="padding: 8px;">{specialist}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Hardware Installed:</td><td style="padding: 8px;">{data.get('hardware_installed', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Number of Stations:</td><td style="padding: 8px;">{data.get('num_stations', 'N/A')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Menu Setup:</td><td style="padding: 8px;">{data.get('menu_setup', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Training Completed:</td><td style="padding: 8px;">{'✅ Yes' if data.get('training_completed') else '❌ No'}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">System Live:</td><td style="padding: 8px;">{'✅ Yes' if data.get('system_live') else '❌ No'}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Issues / Follow-ups:</td><td style="padding: 8px;">{data.get('issues', 'None')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Completion Notes:</td><td style="padding: 8px;">{data.get('completion_notes', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Completed By:</td><td style="padding: 8px;">{data.get('completed_by', 'N/A')}</td></tr>
+                </table>
+            </div>
+            """
+
+            # Add @mentions
+            mentions = []
+            mentioned_emails = set()
+            if user and user.get("email"):
+                mentions.append(f'<a href="mailto:{user["email"]}" data-type="mention">@{user["name"]}</a>')
+                mentioned_emails.add(user["email"])
+            if current and current.get("email") and current["email"] not in mentioned_emails:
+                mentions.append(f'<a href="mailto:{current["email"]}" data-type="mention">@{current["name"]}</a>')
+                mentioned_emails.add(current["email"])
+            if ADMIN_EMAIL and ADMIN_EMAIL not in mentioned_emails:
+                mentions.append(f'<a href="mailto:{ADMIN_EMAIL}" data-type="mention">@Admin</a>')
+            if mentions:
+                note_body += "<br><br>" + " ".join(mentions)
+
+            note_props = {
+                "hs_note_body": note_body,
+                "hs_timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+            if user and user.get("hubspot_owner_id"):
+                note_props["hubspot_owner_id"] = user["hubspot_owner_id"]
+
+            # Post note to deal
+            hubspot_request("POST", "/crm/v3/objects/notes", {
+                "properties": note_props,
+                "associations": [{
+                    "to": {"id": int(booking["hubspot_deal_id"])},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}],
+                }],
+            })
+            # Post note to company
+            if booking.get("hubspot_company_id"):
+                hubspot_request("POST", "/crm/v3/objects/notes", {
+                    "properties": note_props,
+                    "associations": [{
+                        "to": {"id": int(booking["hubspot_company_id"])},
+                        "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 190}],
+                    }],
+                })
+
+                # Update company deployment stage to Deployed (Active)
+                hubspot_request("PATCH", f"/crm/v3/objects/companies/{booking['hubspot_company_id']}", {
+                    "properties": {"migrated_00nfi000003lzy1uac": "Active"}
+                })
+
+            result["hubspot_note"] = "sent"
+            result["deployment_stage"] = "deployed"
+        except Exception as e:
+            result["hubspot_note"] = f"error: {str(e)}"
+
+    return jsonify(result)
 
 
 # ── Calendar ICS ──────────────────────────────────────────────────────────────

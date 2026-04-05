@@ -83,6 +83,31 @@
         .badge-onboarding { background: #d1fae5; color: #065f46; }
         .badge-confirmed { background: #d1fae5; color: #065f46; }
         .badge-cancelled { background: #fee2e2; color: #991b1b; }
+        .badge-completed { background: #dbeafe; color: #1d4ed8; }
+
+        /* Completion form */
+        .complete-form .form-row { margin-bottom: 14px; }
+        .complete-form .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-muted); }
+        .complete-form .form-row input,
+        .complete-form .form-row select,
+        .complete-form .form-row textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .complete-form .form-row textarea { min-height: 70px; resize: vertical; }
+        .complete-form .form-row input:focus,
+        .complete-form .form-row select:focus,
+        .complete-form .form-row textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(255,92,53,0.1); }
+        .complete-form .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .complete-form .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .complete-form .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); }
+        .complete-form .checkbox-row label { margin-bottom: 0; font-size: 14px; color: var(--text); }
+        .complete-summary { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+        .complete-summary strong { display: block; margin-bottom: 4px; color: #065f46; }
 
         .user-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 
@@ -135,6 +160,7 @@
             .modal-footer .btn { flex: 1; min-width: 80px; text-align: center; }
 
             .actions { flex-wrap: wrap; }
+            .complete-form .form-row-2 { grid-template-columns: 1fr; gap: 0; }
         }
 
         @media (max-width: 380px) {
@@ -200,8 +226,73 @@
                 <button class="btn btn-ghost" onclick="closeModal()">Close</button>
                 <a class="btn btn-success btn-sm" id="viewIcsLink" href="#" target="_blank">Download .ics</a>
                 <button class="btn btn-primary btn-sm" onclick="sendInvite()">Send Invite</button>
+                <button class="btn btn-success btn-sm" id="completeBtn" onclick="openCompleteForm()">✓ Complete</button>
                 <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel Booking</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complete Deployment Modal -->
+    <div class="modal-overlay" id="completeModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>✓ Complete Deployment</h2>
+                <button class="modal-close" onclick="closeCompleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="complete-summary" id="completeSummary"></div>
+                <form class="complete-form" id="completeForm">
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Hardware Installed</label>
+                            <input type="text" id="completeHardware" placeholder="e.g. 2x POS, 1x KDS, 1x Printer">
+                        </div>
+                        <div class="form-row">
+                            <label>Number of Stations</label>
+                            <input type="number" id="completeStations" placeholder="e.g. 2" min="0">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Menu Setup</label>
+                        <select id="completeMenuSetup">
+                            <option value="">Select...</option>
+                            <option value="Complete">Complete</option>
+                            <option value="Partial">Partial - follow up needed</option>
+                            <option value="Not Required">Not Required</option>
+                        </select>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="completeTraining">
+                        <label for="completeTraining">Training completed with staff</label>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="completeGoLive">
+                        <label for="completeGoLive">System is live and processing orders</label>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Issues / Follow-ups</label>
+                        <textarea id="completeIssues" placeholder="Any outstanding issues or follow-up actions..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Completion Notes</label>
+                        <textarea id="completeNotes" placeholder="General notes about the deployment..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Completed By</label>
+                        <input type="text" id="completeBy" readonly>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeCompleteModal()">Cancel</button>
+                <button class="btn btn-success" onclick="submitComplete()" id="submitCompleteBtn">Mark as Deployed</button>
             </div>
         </div>
     </div>
@@ -347,7 +438,8 @@
             document.getElementById("viewTitle").textContent = b.title;
             document.getElementById("viewIcsLink").href = `/api/bookings/${b.id}/ics`;
             const statusClass = b.status === 'cancelled' ? 'badge-cancelled' : 'badge-confirmed';
-            document.getElementById("cancelBtn").style.display = b.status === 'cancelled' ? 'none' : '';
+            document.getElementById("cancelBtn").style.display = (b.status === 'cancelled' || b.status === 'completed') ? 'none' : '';
+            document.getElementById("completeBtn").style.display = (b.status === 'confirmed') ? '' : 'none';
             document.getElementById("viewBody").innerHTML = `
                 <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${b.status || 'confirmed'}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
@@ -414,6 +506,68 @@
             } else {
                 alert(data.message || data.error);
             }
+        }
+
+        function openCompleteForm() {
+            if (!currentBooking) return;
+            const b = currentBooking;
+            const start = new Date(b.start_datetime);
+            document.getElementById("completeSummary").innerHTML = `
+                <strong>${b.company_name || b.title}</strong>
+                ${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | ${b.user_name || 'Unassigned'}
+            `;
+            document.getElementById("completeBy").value = currentUser ? currentUser.name : '';
+            document.getElementById("completeHardware").value = '';
+            document.getElementById("completeStations").value = '';
+            document.getElementById("completeMenuSetup").value = '';
+            document.getElementById("completeTraining").checked = false;
+            document.getElementById("completeGoLive").checked = false;
+            document.getElementById("completeIssues").value = '';
+            document.getElementById("completeNotes").value = '';
+            closeModal();
+            document.getElementById("completeModal").classList.add("open");
+        }
+
+        function closeCompleteModal() {
+            document.getElementById("completeModal").classList.remove("open");
+        }
+
+        async function submitComplete() {
+            if (!currentBooking) return;
+            const btn = document.getElementById("submitCompleteBtn");
+            btn.disabled = true;
+            btn.textContent = "Submitting...";
+
+            const payload = {
+                hardware_installed: document.getElementById("completeHardware").value,
+                num_stations: document.getElementById("completeStations").value,
+                menu_setup: document.getElementById("completeMenuSetup").value,
+                training_completed: document.getElementById("completeTraining").checked,
+                system_live: document.getElementById("completeGoLive").checked,
+                issues: document.getElementById("completeIssues").value,
+                completion_notes: document.getElementById("completeNotes").value,
+                completed_by: document.getElementById("completeBy").value,
+            };
+
+            try {
+                const res = await fetch(`/api/bookings/${currentBooking.id}/complete`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    closeCompleteModal();
+                    loadBookings();
+                    alert("Deployment marked as complete!");
+                } else {
+                    alert(data.error || "Failed to complete deployment");
+                }
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
+            btn.disabled = false;
+            btn.textContent = "Mark as Deployed";
         }
     </script>
 </body>
