@@ -28,6 +28,10 @@
       "dest": "public/bookings.html"
     },
     {
+      "src": "/(.*\\.(?:png|jpg|jpeg|svg|ico|css|js))",
+      "dest": "public/$1"
+    },
+    {
       "src": "^/$",
       "dest": "public/index.html"
     }
