@@ -646,41 +646,26 @@
         }
 
         function buildTableHTML(bookings) {
-            return `
-                <div class="table-wrapper"><table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Start</th>
-                            <th>Title</th>
-                            <th>Type</th>
-                            <th>Assigned To</th>
-                            <th>Company</th>
-                            <th>Status</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${bookings.map(b => {
-                            const start = new Date(b.start_datetime);
-                            const dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-                            const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
-                            const statusLabel = b.status === 'completed' ? 'deployed' : (b.status || 'confirmed');
-                            return \`
-                                <tr style="cursor:pointer;" onclick="viewBooking('\${b.id}')">
-                                    <td>\${dateStr}</td>
-                                    <td>\${timeStr}</td>
-                                    <td><strong>\${b.title}</strong></td>
-                                    <td><span class="badge \${typeClass}">\${b.booking_type}</span></td>
-                                    <td><span class="user-dot" style="background:\${b.user_color || '#3788d8'}"></span>\${b.user_name || ''}</td>
-                                    <td>\${b.company_name || '-'}</td>
-                                    <td><span class="badge badge-\${b.status || 'confirmed'}">\${statusLabel}</span></td>
-                                    <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking('\${b.id}')">View</button></td>
-                                </tr>\`;
-                        }).join("")}
-                    </tbody>
-                </table></div>`;
+            var rows = bookings.map(function(b) {
+                var start = new Date(b.start_datetime);
+                var dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                var timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                var typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
+                var statusLabel = b.status === 'completed' ? 'deployed' : (b.status || 'confirmed');
+                return '<tr style="cursor:pointer;" onclick="viewBooking(\'' + b.id + '\')">' +
+                    '<td>' + dateStr + '</td>' +
+                    '<td>' + timeStr + '</td>' +
+                    '<td><strong>' + b.title + '</strong></td>' +
+                    '<td><span class="badge ' + typeClass + '">' + b.booking_type + '</span></td>' +
+                    '<td><span class="user-dot" style="background:' + (b.user_color || '#3788d8') + '"></span>' + (b.user_name || '') + '</td>' +
+                    '<td>' + (b.company_name || '-') + '</td>' +
+                    '<td><span class="badge badge-' + (b.status || 'confirmed') + '">' + statusLabel + '</span></td>' +
+                    '<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking(\'' + b.id + '\')">View</button></td>' +
+                    '</tr>';
+            }).join("");
+            return '<div class="table-wrapper"><table>' +
+                '<thead><tr><th>Date</th><th>Start</th><th>Title</th><th>Type</th><th>Assigned To</th><th>Company</th><th>Status</th><th></th></tr></thead>' +
+                '<tbody>' + rows + '</tbody></table></div>';
         }
 
         function renderTable(bookings) {
