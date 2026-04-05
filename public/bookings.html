@@ -910,7 +910,8 @@
             document.getElementById("cmpCustLast").value = b.contact_name ? b.contact_name.split(' ').slice(1).join(' ') || '' : '';
             document.getElementById("cmpCustEmail").value = b.contact_email || '';
             document.getElementById("cmpCustPhone").value = b.contact_phone || '';
-            closeModal();
+            // Close view modal without clearing currentBooking
+            document.getElementById("viewModal").classList.remove("open");
             document.getElementById("completeModal").classList.add("open");
             // Init signature pad after modal is visible
             setTimeout(initSignaturePad, 100);
