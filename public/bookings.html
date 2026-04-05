@@ -106,6 +106,41 @@
         .field-value { margin-top: 2px; font-size: 14px; }
 
         .hidden { display: none !important; }
+
+        /* ── Mobile Responsive ── */
+        @media (max-width: 768px) {
+            .top-bar { padding: 10px 14px; }
+            .top-bar h1 { font-size: 16px; }
+            .top-bar h1 img { height: 22px !important; }
+            .top-bar nav { gap: 4px; }
+            .top-bar nav a { margin-left: 8px; font-size: 12px; }
+            .version-badge { display: none; }
+
+            .container { padding: 12px; }
+
+            .filters { padding: 12px; gap: 10px; }
+            .filters label { font-size: 12px; }
+            .filters input, .filters select { font-size: 13px; padding: 6px 10px; }
+            .filter-group { width: 100%; }
+            .filter-group input, .filter-group select { width: 100%; }
+
+            .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 12px; }
+            table { min-width: 700px; }
+            th, td { padding: 10px 12px; font-size: 13px; white-space: nowrap; }
+
+            .modal { width: 95vw; max-height: 85vh; border-radius: 10px; }
+            .modal-header { padding: 12px 16px; }
+            .modal-body { padding: 16px; }
+            .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
+            .modal-footer .btn { flex: 1; min-width: 80px; text-align: center; }
+
+            .actions { flex-wrap: wrap; }
+        }
+
+        @media (max-width: 380px) {
+            .top-bar h1 { font-size: 14px; }
+            .top-bar nav a { margin-left: 6px; font-size: 11px; }
+        }
     </style>
 </head>
 <body>
@@ -267,7 +302,7 @@
             }
 
             container.innerHTML = `
-                <table>
+                <div class="table-wrapper"><table>
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -299,7 +334,7 @@
                                 </tr>`;
                         }).join("")}
                     </tbody>
-                </table>`;
+                </table></div>`;
         }
 
         function viewBooking(id) {

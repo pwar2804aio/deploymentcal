@@ -186,6 +186,57 @@
         .config-field label { min-width: 160px; font-size: 13px; font-weight: 600; }
         .config-field input { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
         .config-field .hint { font-size: 11px; color: var(--text-muted); }
+
+        /* ── Mobile Responsive ── */
+        @media (max-width: 768px) {
+            .top-bar { padding: 10px 14px; }
+            .top-bar h1 { font-size: 16px; }
+            .top-bar h1 img { height: 22px !important; }
+            .top-bar nav { gap: 4px; }
+            .top-bar nav a { margin-left: 8px; font-size: 12px; }
+            .version-badge { display: none; }
+
+            .container { padding: 0 12px; margin: 12px auto; }
+
+            .section-header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+            .section-header h2 { font-size: 15px; }
+            .section-body { padding: 14px; }
+
+            .tab-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .tab { padding: 8px 12px; font-size: 13px; white-space: nowrap; }
+
+            .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 500px; }
+            th, td { padding: 8px 10px; font-size: 13px; }
+
+            .avail-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+            .avail-day { padding: 8px 6px; }
+            .avail-day .day-name { font-size: 11px; margin-bottom: 6px; }
+            .avail-day input { font-size: 11px; }
+
+            .form-inline { flex-direction: column; }
+            .form-inline .form-row { width: 100%; min-width: auto; }
+
+            .modal { width: 95vw; max-height: 85vh; border-radius: 10px; }
+            .modal-header { padding: 12px 16px; }
+            .modal-body { padding: 16px; }
+            .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
+
+            .config-field { flex-direction: column; align-items: flex-start; gap: 6px; }
+            .config-field label { min-width: auto; }
+            .config-field input { width: 100%; }
+
+            .time-off-item { flex-direction: column; align-items: flex-start; gap: 6px; }
+        }
+
+        @media (max-width: 480px) {
+            .avail-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 380px) {
+            .top-bar h1 { font-size: 14px; }
+            .top-bar nav a { margin-left: 6px; font-size: 11px; }
+        }
     </style>
 </head>
 <body>
@@ -214,12 +265,14 @@
                     <button class="btn btn-primary btn-sm" onclick="openUserModal()">+ Add Member</button>
                 </div>
                 <div class="section-body" style="padding:0;">
+                    <div class="table-wrapper">
                     <table>
                         <thead>
                             <tr><th>Color</th><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr>
                         </thead>
                         <tbody id="usersTableBody"></tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
