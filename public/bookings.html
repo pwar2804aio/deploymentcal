@@ -83,7 +83,22 @@
         .badge-onboarding { background: #d1fae5; color: #065f46; }
         .badge-confirmed { background: #d1fae5; color: #065f46; }
         .badge-cancelled { background: #fee2e2; color: #991b1b; }
-        .badge-completed { background: #dbeafe; color: #1d4ed8; }
+        .badge-completed { background: #d1fae5; color: #065f46; }
+
+        .section-header-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--success);
+        }
+        .section-header-bar h3 {
+            font-size: 16px;
+            color: #065f46;
+            margin: 0;
+        }
+        .section-header-bar .results-count { margin-bottom: 0; }
 
         /* Completion form */
         .complete-form .form-row { margin-bottom: 14px; }
@@ -222,6 +237,15 @@
                     <option value="">All</option>
                 </select>
             </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select id="filterStatus">
+                    <option value="">All</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Deployed</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </div>
             <button class="btn btn-primary" onclick="loadBookings()">Filter</button>
             <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
         </div>
@@ -229,6 +253,14 @@
         <div class="results-count" id="resultsCount"></div>
 
         <div id="bookingsTable"></div>
+
+        <div id="deployedSection" class="hidden" style="margin-top:32px;">
+            <div class="section-header-bar">
+                <h3>Deployed</h3>
+                <span class="results-count" id="deployedCount"></span>
+            </div>
+            <div id="deployedTable"></div>
+        </div>
     </div>
 
     <!-- View Booking Modal -->
@@ -609,23 +641,12 @@
             document.getElementById("filterTo").value = "";
             document.getElementById("filterType").value = "";
             document.getElementById("filterUser").value = "";
+            document.getElementById("filterStatus").value = "";
             loadBookings();
         }
 
-        function renderTable(bookings) {
-            const container = document.getElementById("bookingsTable");
-            document.getElementById("resultsCount").textContent = `${bookings.length} booking${bookings.length !== 1 ? 's' : ''} found`;
-
-            if (!bookings.length) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>No bookings found</h3>
-                        <p>Try adjusting your filters or create a new booking from the calendar.</p>
-                    </div>`;
-                return;
-            }
-
-            container.innerHTML = `
+        function buildTableHTML(bookings) {
+            return `
                 <div class="table-wrapper"><table>
                     <thead>
                         <tr>
@@ -645,20 +666,64 @@
                             const dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
                             const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                             const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
-                            return `
-                                <tr style="cursor:pointer;" onclick="viewBooking('${b.id}')">
-                                    <td>${dateStr}</td>
-                                    <td>${timeStr}</td>
-                                    <td><strong>${b.title}</strong></td>
-                                    <td><span class="badge ${typeClass}">${b.booking_type}</span></td>
-                                    <td><span class="user-dot" style="background:${b.user_color || '#3788d8'}"></span>${b.user_name || ''}</td>
-                                    <td>${b.company_name || '-'}</td>
-                                    <td><span class="badge badge-${b.status || 'confirmed'}">${b.status || 'confirmed'}</span></td>
-                                    <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking('${b.id}')">View</button></td>
-                                </tr>`;
+                            const statusLabel = b.status === 'completed' ? 'deployed' : (b.status || 'confirmed');
+                            return \`
+                                <tr style="cursor:pointer;" onclick="viewBooking('\${b.id}')">
+                                    <td>\${dateStr}</td>
+                                    <td>\${timeStr}</td>
+                                    <td><strong>\${b.title}</strong></td>
+                                    <td><span class="badge \${typeClass}">\${b.booking_type}</span></td>
+                                    <td><span class="user-dot" style="background:\${b.user_color || '#3788d8'}"></span>\${b.user_name || ''}</td>
+                                    <td>\${b.company_name || '-'}</td>
+                                    <td><span class="badge badge-\${b.status || 'confirmed'}">\${statusLabel}</span></td>
+                                    <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking('\${b.id}')">View</button></td>
+                                </tr>\`;
                         }).join("")}
                     </tbody>
                 </table></div>`;
+        }
+
+        function renderTable(bookings) {
+            const container = document.getElementById("bookingsTable");
+            const deployedSection = document.getElementById("deployedSection");
+            const deployedContainer = document.getElementById("deployedTable");
+            const statusFilter = document.getElementById("filterStatus").value;
+
+            // Split into active (confirmed/cancelled) and deployed (completed)
+            const active = bookings.filter(b => b.status !== 'completed');
+            const deployed = bookings.filter(b => b.status === 'completed');
+
+            // If status filter is set, show only that
+            if (statusFilter === 'completed') {
+                document.getElementById("resultsCount").textContent = `${deployed.length} deployed booking${deployed.length !== 1 ? 's' : ''}`;
+                container.innerHTML = deployed.length ? buildTableHTML(deployed) : `<div class="empty-state"><h3>No deployed bookings found</h3></div>`;
+                deployedSection.classList.add('hidden');
+                return;
+            }
+            if (statusFilter) {
+                const filtered = bookings.filter(b => b.status === statusFilter || (!b.status && statusFilter === 'confirmed'));
+                document.getElementById("resultsCount").textContent = `${filtered.length} booking${filtered.length !== 1 ? 's' : ''} found`;
+                container.innerHTML = filtered.length ? buildTableHTML(filtered) : `<div class="empty-state"><h3>No bookings found</h3></div>`;
+                deployedSection.classList.add('hidden');
+                return;
+            }
+
+            // No status filter — show both sections
+            document.getElementById("resultsCount").textContent = `${active.length} deployment${active.length !== 1 ? 's' : ''}`;
+
+            if (!active.length) {
+                container.innerHTML = `<div class="empty-state"><h3>No upcoming deployments</h3><p>All bookings have been deployed or try adjusting your filters.</p></div>`;
+            } else {
+                container.innerHTML = buildTableHTML(active);
+            }
+
+            if (deployed.length) {
+                deployedSection.classList.remove('hidden');
+                document.getElementById("deployedCount").textContent = `${deployed.length} deployed`;
+                deployedContainer.innerHTML = buildTableHTML(deployed);
+            } else {
+                deployedSection.classList.add('hidden');
+            }
         }
 
         function viewBooking(id) {
