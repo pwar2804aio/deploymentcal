@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.9.3"
+VERSION = "2.9.4"
 
 app = Flask(__name__)
 
@@ -806,6 +806,43 @@ def create_booking():
             except Exception:
                 pass  # Don't fail booking if date update fails
 
+            # Create a HubSpot task to trigger native notifications
+            try:
+                formatted_date, start_time = format_booking_date(data)
+                task_body = f"New deployment booked for {data.get('company_name', 'N/A')} on {formatted_date} at {start_time}."
+                task_props = {
+                    "hs_task_body": task_body,
+                    "hs_task_subject": f"Deployment Booked: {data.get('company_name', data.get('title', 'N/A'))}",
+                    "hs_task_status": "NOT_STARTED",
+                    "hs_task_priority": "HIGH",
+                    "hs_timestamp": datetime.utcnow().isoformat() + "Z",
+                }
+                # Set due date to the booking date
+                try:
+                    due_dt = datetime.fromisoformat(data["start_datetime"])
+                    task_props["hs_task_due_date"] = due_dt.isoformat() + "Z"
+                except Exception:
+                    pass
+                # Assign to specialist so they get notified
+                if user and user.get("hubspot_owner_id"):
+                    task_props["hubspot_owner_id"] = user["hubspot_owner_id"]
+                task_associations = [{
+                    "to": {"id": int(data["hubspot_deal_id"])},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 216}],
+                }]
+                if data.get("hubspot_company_id"):
+                    task_associations.append({
+                        "to": {"id": int(data["hubspot_company_id"])},
+                        "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 192}],
+                    })
+                hubspot_request("POST", "/crm/v3/objects/tasks", {
+                    "properties": task_props,
+                    "associations": task_associations,
+                })
+                result["hubspot_task"] = "sent"
+            except Exception as e:
+                result["hubspot_task"] = f"error: {str(e)}"
+
             result["hubspot_note"] = "sent"
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
@@ -1036,6 +1073,33 @@ def complete_booking(bid):
                 hubspot_request("PATCH", f"/crm/v3/objects/companies/{booking['hubspot_company_id']}", {
                     "properties": {"migrated_00nfi000003lzy1uac": "Active"}
                 })
+
+            # Create a HubSpot task to notify about completion
+            try:
+                task_props = {
+                    "hs_task_body": f"Deployment completed for {data.get('company_name', booking.get('company_name', 'N/A'))}. Sign-off received from {data.get('customer_first_name', '')} {data.get('customer_last_name', '')}.",
+                    "hs_task_subject": f"Deployment Complete: {data.get('company_name', booking.get('company_name', 'N/A'))}",
+                    "hs_task_status": "COMPLETED",
+                    "hs_task_priority": "HIGH",
+                    "hs_timestamp": datetime.utcnow().isoformat() + "Z",
+                }
+                if user and user.get("hubspot_owner_id"):
+                    task_props["hubspot_owner_id"] = user["hubspot_owner_id"]
+                task_associations = [{
+                    "to": {"id": int(booking["hubspot_deal_id"])},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 216}],
+                }]
+                if booking.get("hubspot_company_id"):
+                    task_associations.append({
+                        "to": {"id": int(booking["hubspot_company_id"])},
+                        "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 192}],
+                    })
+                hubspot_request("POST", "/crm/v3/objects/tasks", {
+                    "properties": task_props,
+                    "associations": task_associations,
+                })
+            except Exception:
+                pass
 
             result["hubspot_note"] = "sent"
             result["deployment_stage"] = "deployed"
