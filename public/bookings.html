@@ -223,15 +223,6 @@
                 <input type="date" id="filterTo">
             </div>
             <div class="filter-group">
-                <label>Type</label>
-                <select id="filterType">
-                    <option value="">All</option>
-                    <option value="install">Install</option>
-                    <option value="training">Training</option>
-                    <option value="onboarding">Onboarding</option>
-                </select>
-            </div>
-            <div class="filter-group">
                 <label>Team Member</label>
                 <select id="filterUser">
                     <option value="">All</option>
@@ -611,7 +602,6 @@
         async function loadBookings() {
             const from = document.getElementById("filterFrom").value;
             const to = document.getElementById("filterTo").value;
-            const type = document.getElementById("filterType").value;
             const userId = document.getElementById("filterUser").value;
 
             let url = "/api/bookings?";
@@ -622,11 +612,6 @@
             try {
                 const res = await fetch(url);
                 let bookings = await res.json();
-
-                // Client-side type filter
-                if (type) {
-                    bookings = bookings.filter(b => b.booking_type === type);
-                }
 
                 allBookings = bookings;
                 renderTable(bookings);
@@ -639,7 +624,6 @@
         function clearFilters() {
             document.getElementById("filterFrom").value = "";
             document.getElementById("filterTo").value = "";
-            document.getElementById("filterType").value = "";
             document.getElementById("filterUser").value = "";
             document.getElementById("filterStatus").value = "";
             loadBookings();
