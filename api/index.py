@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.8.2"
+VERSION = "2.9.2"
 
 app = Flask(__name__)
 
@@ -792,13 +792,16 @@ def create_booking():
 
             # Update Install Date on deal and company
             try:
-                install_date = datetime.fromisoformat(data["start_datetime"]).strftime("%Y-%m-%d")
+                dt = datetime.fromisoformat(data["start_datetime"])
+                install_date_str = dt.strftime("%Y-%m-%d")
+                # Deal property is datetime type - needs midnight UTC timestamp in ms
+                install_date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
                 hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
-                    "properties": {"install_date_new": install_date}
+                    "properties": {"install_date_new": install_date_ms}
                 })
                 if data.get("hubspot_company_id"):
                     hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
-                        "properties": {"migrated_00npw00000fv4pz2ad": install_date}
+                        "properties": {"migrated_00npw00000fv4pz2ad": install_date_str}
                     })
             except Exception:
                 pass  # Don't fail booking if date update fails
@@ -904,39 +907,88 @@ def complete_booking(bid):
     result = {"ok": True}
 
     # Get specialist info
-    specialist = "Unknown"
+    specialist = data.get("specialist", "Unknown")
     user = None
     if booking.get("user_id"):
         cur2 = db.cursor()
         cur2.execute("SELECT name, email, hubspot_owner_id FROM users WHERE id = %s", (booking["user_id"],))
         user = dict_one(cur2)
         cur2.close()
-        if user:
+        if user and not specialist:
             specialist = user["name"]
 
     current = get_current_user()
 
+    # Helper for yes/no/na formatting
+    def yn(val, detail_key=None):
+        if not val:
+            return "—"
+        icon = "✅" if val == "Yes" else ("❌" if val == "No" else "➖")
+        result_str = f"{icon} {val}"
+        if val == "No" and detail_key and data.get(detail_key):
+            result_str += f"<br><em style='color:#6b7c93;font-size:12px;'>{data[detail_key]}</em>"
+        return result_str
+
     if HUBSPOT_API_KEY and booking.get("hubspot_deal_id"):
         try:
             formatted_date, start_time = format_booking_date(booking)
-            # Build completion note HTML
+
+            # FOH / BOH areas
+            foh_areas = ", ".join(data.get("foh_areas", [])) or "None"
+            boh_areas = ", ".join(data.get("boh_areas", [])) or "None"
+
+            # Build comprehensive completion note HTML
             note_body = f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <div style="font-family: Arial, sans-serif; max-width: 650px;">
                 <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: #16a34a;">✅ Deployment Completed</h2>
+                    <h2 style="margin: 0; color: #16a34a;">✅ Deployment Sign Off</h2>
                 </div>
+
+                <h3 style="color: #2e3470; border-bottom: 2px solid #ff5c35; padding-bottom: 4px; margin: 16px 0 8px;">Engineer to Complete</h3>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 180px;">Company:</td><td style="padding: 8px;">{booking.get('company_name', 'N/A')}</td></tr>
-                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Deployment Date:</td><td style="padding: 8px;">{formatted_date}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; width: 200px;">Company:</td><td style="padding: 8px;">{data.get('company_name', booking.get('company_name', 'N/A'))}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Install Date:</td><td style="padding: 8px;">{formatted_date}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Deployment Specialist:</td><td style="padding: 8px;">{specialist}</td></tr>
-                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Hardware Installed:</td><td style="padding: 8px;">{data.get('hardware_installed', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Number of Stations:</td><td style="padding: 8px;">{data.get('num_stations', 'N/A')}</td></tr>
-                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Menu Setup:</td><td style="padding: 8px;">{data.get('menu_setup', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Training Completed:</td><td style="padding: 8px;">{'✅ Yes' if data.get('training_completed') else '❌ No'}</td></tr>
-                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">System Live:</td><td style="padding: 8px;">{'✅ Yes' if data.get('system_live') else '❌ No'}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Issues / Follow-ups:</td><td style="padding: 8px;">{data.get('issues', 'None')}</td></tr>
-                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Completion Notes:</td><td style="padding: 8px;">{data.get('completion_notes', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Completed By:</td><td style="padding: 8px;">{data.get('completed_by', 'N/A')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Install Complete:</td><td style="padding: 8px;">{yn(data.get('install_complete'))}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Deployment Notes:</td><td style="padding: 8px;">{data.get('deployment_notes') or '—'}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Network Install Details:</td><td style="padding: 8px;">{data.get('network_details') or '—'}</td></tr>
+                </table>
+
+                <h3 style="color: #2e3470; border-bottom: 2px solid #ff5c35; padding-bottom: 4px; margin: 16px 0 8px;">Hardware Details</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 200px;">Network Explained:</td><td style="padding: 8px;">{yn(data.get('network_explained'))}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Printers Working:</td><td style="padding: 8px;">{yn(data.get('printers_working'))}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Station Areas:</td><td style="padding: 8px;">{yn(data.get('station_areas'), 'station_areas_detail')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Payment Terminals:</td><td style="padding: 8px;">{yn(data.get('payment_terminals'), 'payment_terminals_detail')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Cash Drawers:</td><td style="padding: 8px;">{yn(data.get('cash_drawers'), 'cash_drawers_detail')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">KDS:</td><td style="padding: 8px;">{yn(data.get('kds'), 'kds_detail')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Kiosks:</td><td style="padding: 8px;">{yn(data.get('kiosks'), 'kiosks_detail')}</td></tr>
+                </table>
+
+                <h3 style="color: #2e3470; border-bottom: 2px solid #ff5c35; padding-bottom: 4px; margin: 16px 0 8px;">Training Sign Off - FOH</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 200px;">FOH Training Given:</td><td style="padding: 8px;">{yn(data.get('foh_training'), 'foh_details')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">FOH Areas Trained:</td><td style="padding: 8px;">{foh_areas}</td></tr>
+                </table>
+
+                <h3 style="color: #2e3470; border-bottom: 2px solid #ff5c35; padding-bottom: 4px; margin: 16px 0 8px;">Training Sign Off - BOH</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 200px;">BOH Training Given:</td><td style="padding: 8px;">{yn(data.get('boh_training'), 'boh_details')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">BOH Areas Trained:</td><td style="padding: 8px;">{boh_areas}</td></tr>
+                </table>
+
+                <h3 style="color: #2e3470; border-bottom: 2px solid #ff5c35; padding-bottom: 4px; margin: 16px 0 8px;">Support Confirmation</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 200px;">Support Confirmed:</td><td style="padding: 8px;">{'✅ Yes' if data.get('support_confirmed') else '❌ No'}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Follow-up Notes:</td><td style="padding: 8px;">{data.get('follow_up') or '—'}</td></tr>
+                </table>
+
+                <h3 style="color: #2e3470; border-bottom: 2px solid #ff5c35; padding-bottom: 4px; margin: 16px 0 8px;">Customer Sign Off</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 200px;">Customer Name:</td><td style="padding: 8px;">{data.get('customer_first_name', '')} {data.get('customer_last_name', '')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Customer Email:</td><td style="padding: 8px;">{data.get('customer_email', '—')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Customer Phone:</td><td style="padding: 8px;">{data.get('customer_phone', '—')}</td></tr>
+                    <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Signature:</td><td style="padding: 8px;">{'✅ Provided' if data.get('signature') else '❌ Not provided'}</td></tr>
                 </table>
             </div>
             """

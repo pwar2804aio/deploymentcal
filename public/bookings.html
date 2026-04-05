@@ -108,6 +108,22 @@
         .complete-form .checkbox-row label { margin-bottom: 0; font-size: 14px; color: var(--text); }
         .complete-summary { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
         .complete-summary strong { display: block; margin-bottom: 4px; color: #065f46; }
+        .form-section-title { font-size: 15px; font-weight: 700; color: var(--nav-bg); border-bottom: 2px solid var(--primary); padding-bottom: 6px; margin: 20px 0 12px; }
+        .form-section-title:first-of-type { margin-top: 0; }
+        .req { color: var(--danger); }
+        .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px 12px; margin-bottom: 14px; }
+        .support-info { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 13px; }
+        .support-info strong { display: block; margin-bottom: 4px; color: #1d4ed8; }
+        .support-info p { margin: 2px 0; }
+        .support-info a { color: var(--primary); }
+        .signoff-disclaimer { background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 12px; color: #92400e; line-height: 1.5; }
+        .field-hint { display: block; font-size: 12px; color: #6b7c93; font-style: italic; margin-bottom: 6px; line-height: 1.4; }
+        .img-preview-box { margin-top: 6px; }
+        .img-preview-box img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+        .signature-pad-wrapper { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 8px; background: #fff; }
+        .signature-pad-wrapper canvas { display: block; width: 100%; height: 150px; cursor: crosshair; touch-action: none; }
+        .signature-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+        .signature-actions button { font-size: 12px; }
 
         .user-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 
@@ -161,6 +177,7 @@
 
             .actions { flex-wrap: wrap; }
             .complete-form .form-row-2 { grid-template-columns: 1fr; gap: 0; }
+            .checkbox-grid { grid-template-columns: 1fr 1fr; }
         }
 
         @media (max-width: 380px) {
@@ -235,58 +252,274 @@
 
     <!-- Complete Deployment Modal -->
     <div class="modal-overlay" id="completeModal">
-        <div class="modal">
+        <div class="modal" style="width:680px;max-width:95vw;">
             <div class="modal-header">
-                <h2>✓ Complete Deployment</h2>
+                <h2>Deployment &amp; Sign Off</h2>
                 <button class="modal-close" onclick="closeCompleteModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="complete-summary" id="completeSummary"></div>
                 <form class="complete-form" id="completeForm">
-                    <div class="form-row-2">
-                        <div class="form-row">
-                            <label>Hardware Installed</label>
-                            <input type="text" id="completeHardware" placeholder="e.g. 2x POS, 1x KDS, 1x Printer">
-                        </div>
-                        <div class="form-row">
-                            <label>Number of Stations</label>
-                            <input type="number" id="completeStations" placeholder="e.g. 2" min="0">
-                        </div>
+                    <!-- Section: Engineer to complete -->
+                    <div class="form-section-title">Engineer to Complete</div>
+
+                    <div class="form-row">
+                        <label>Company/Restaurant Name</label>
+                        <input type="text" id="cmpCompany">
                     </div>
 
                     <div class="form-row">
-                        <label>Menu Setup</label>
-                        <select id="completeMenuSetup">
+                        <label>Is the install complete <span class="req">*</span></label>
+                        <select id="cmpInstallComplete" required>
                             <option value="">Select...</option>
-                            <option value="Complete">Complete</option>
-                            <option value="Partial">Partial - follow up needed</option>
-                            <option value="Not Required">Not Required</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
                         </select>
                     </div>
 
-                    <div class="checkbox-row">
-                        <input type="checkbox" id="completeTraining">
-                        <label for="completeTraining">Training completed with staff</label>
-                    </div>
-
-                    <div class="checkbox-row">
-                        <input type="checkbox" id="completeGoLive">
-                        <label for="completeGoLive">System is live and processing orders</label>
+                    <div class="form-row">
+                        <label>Deployment Notes</label>
+                        <span class="field-hint">What happened, issues, resolutions, pending issues</span>
+                        <textarea id="cmpDeployNotes" placeholder="What happened, issues, resolutions, pending issues..."></textarea>
                     </div>
 
                     <div class="form-row">
-                        <label>Issues / Follow-ups</label>
-                        <textarea id="completeIssues" placeholder="Any outstanding issues or follow-up actions..."></textarea>
+                        <label>Network Install Details</label>
+                        <span class="field-hint">What did we deploy - give details</span>
+                        <textarea id="cmpNetworkDetails" placeholder="What did we deploy - give details..."></textarea>
+                    </div>
+
+                    <!-- Section: Hardware Details -->
+                    <div class="form-section-title">Hardware Details</div>
+
+                    <div class="form-row">
+                        <label>Network Explanation</label>
+                        <span class="field-hint">I can confirm I have had explained to me by the AIO deployment specialist how and why it is important not to change or alter the network settings on any/all devices</span>
+                        <select id="cmpNetworkExplained">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
                     </div>
 
                     <div class="form-row">
-                        <label>Completion Notes</label>
-                        <textarea id="completeNotes" placeholder="General notes about the deployment..."></textarea>
+                        <label>Printers are working</label>
+                        <span class="field-hint">I can confirm all printers are working and test prints have been sent</span>
+                        <select id="cmpPrintersWorking">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
                     </div>
 
                     <div class="form-row">
-                        <label>Completed By</label>
-                        <input type="text" id="completeBy" readonly>
+                        <label>Station Areas Setup</label>
+                        <span class="field-hint">I can confirm my stations are receiving the items as expected</span>
+                        <select id="cmpStationAreas" onchange="toggleDetail(this,'cmpStationDetail')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpStationDetailRow">
+                        <label>Station Areas Detail</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpStationDetail" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Payment Terminals Installed and test complete</label>
+                        <select id="cmpPaymentTerminals" onchange="toggleDetail(this,'cmpPaymentDetail')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpPaymentDetailRow">
+                        <label>Payment terminal details</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpPaymentDetail" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Cash Drawers Installed and Working</label>
+                        <select id="cmpCashDrawers" onchange="toggleDetail(this,'cmpCashDetail')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                            <option value="Not Applicable">Not Applicable</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpCashDetailRow">
+                        <label>Cash Drawers Details</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpCashDetail" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label>KDS installed</label>
+                        <select id="cmpKDS" onchange="toggleDetail(this,'cmpKDSDetail')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                            <option value="Not Applicable">Not Applicable</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpKDSDetailRow">
+                        <label>KDS installed details</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpKDSDetail" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Kiosks installed</label>
+                        <select id="cmpKiosks" onchange="toggleDetail(this,'cmpKioskDetail')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                            <option value="Not Applicable">Not Applicable</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpKioskDetailRow">
+                        <label>Kiosks installed details</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpKioskDetail" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <!-- Section: Training Sign Off - FOH -->
+                    <div class="form-section-title">Training Sign Off - FOH</div>
+
+                    <div class="form-row">
+                        <label>I confirm full training has been given to at least one member of the team</label>
+                        <span class="field-hint">I can confirm I/we have been trained on the basics of how to use AIO and feel that we have been adequately trained</span>
+                        <select id="cmpFOHTraining" onchange="toggleDetail(this,'cmpFOHDetails')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpFOHDetailsRow">
+                        <label>FOH Training Details</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpFOHDetails" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <label style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:block;">FOH Training Areas Completed</label>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-row"><input type="checkbox" id="foh_pos" value="POS"><label for="foh_pos">POS</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_kds" value="KDS"><label for="foh_kds">KDS</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_kiosk" value="Kiosk"><label for="foh_kiosk">Kiosk</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_menuboard" value="Menu Board"><label for="foh_menuboard">Menu Board</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_cashdrawer" value="Cash Drawer"><label for="foh_cashdrawer">Cash Drawer</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_mpos" value="mPOS"><label for="foh_mpos">mPOS</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_mom" value="MOM App"><label for="foh_mom">MOM App</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="foh_other" value="Other"><label for="foh_other">Other</label></div>
+                    </div>
+
+                    <!-- Section: Training Sign Off - BOH -->
+                    <div class="form-section-title">Training Sign Off - BOH</div>
+
+                    <div class="form-row">
+                        <label>I confirm full training has been given to at least one member of the team</label>
+                        <span class="field-hint">I can confirm I/we have been trained on the basics of how to use AIO and feel that we have been adequately trained</span>
+                        <select id="cmpBOHTraining" onchange="toggleDetail(this,'cmpBOHDetails')">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row hidden" id="cmpBOHDetailsRow">
+                        <label>BOH Training Details</label>
+                        <span class="field-hint">If No please provide more details</span>
+                        <textarea id="cmpBOHDetails" placeholder="Please provide more details..."></textarea>
+                    </div>
+
+                    <label style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:block;">BOH Training Areas Completed</label>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-row"><input type="checkbox" id="boh_pos" value="POS"><label for="boh_pos">POS</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_kds" value="KDS"><label for="boh_kds">KDS</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_kiosk" value="Kiosk"><label for="boh_kiosk">Kiosk</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_menuboard" value="Menu Board"><label for="boh_menuboard">Menu Board</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_cashdrawer" value="Cash Drawer"><label for="boh_cashdrawer">Cash Drawer</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_mpos" value="mPOS"><label for="boh_mpos">mPOS</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_mom" value="MOM App"><label for="boh_mom">MOM App</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="boh_other" value="Other"><label for="boh_other">Other</label></div>
+                    </div>
+
+                    <!-- Section: Support Confirmation -->
+                    <div class="form-section-title">Support Confirmation</div>
+
+                    <div class="support-info">
+                        <p>There are multiple ways to get support. Your AIO Buddy is your primary point of contact and is here to guide you and help with anything you may need.</p>
+                        <p style="margin-top:8px;">You also have access to the below support channels 24/7:</p>
+                        <p style="margin-top:6px;"><strong>WhatsApp:</strong> <a href="tel:6505470696">650 547 0696</a></p>
+                        <p><strong>Phone:</strong> <a href="tel:6505470696">650 547 0696</a></p>
+                        <p><strong>Email:</strong> <a href="mailto:help@aioapp.com">help@aioapp.com</a></p>
+                    </div>
+
+                    <div class="checkbox-row" style="margin-bottom:14px;">
+                        <input type="checkbox" id="cmpSupportConfirm">
+                        <label for="cmpSupportConfirm">I can confirm and understand I have received the support details and I understand how I can get assistance</label>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Deployment specialist follow up actions and notes</label>
+                        <span class="field-hint">Please detail anything that is outstanding and needs further action</span>
+                        <textarea id="cmpFollowUp" placeholder="Please detail anything that is outstanding and needs further action..."></textarea>
+                    </div>
+
+                    <!-- Section: Install Images -->
+                    <div class="form-section-title">Install Images - Three install images</div>
+                    <div class="form-row">
+                        <label>Install Image 1</label>
+                        <input type="file" id="cmpImage1" accept="image/*" style="padding:8px;">
+                        <div id="cmpImage1Preview" class="img-preview-box"></div>
+                    </div>
+                    <div class="form-row">
+                        <label>Install Image 2</label>
+                        <input type="file" id="cmpImage2" accept="image/*" style="padding:8px;">
+                        <div id="cmpImage2Preview" class="img-preview-box"></div>
+                    </div>
+                    <div class="form-row">
+                        <label>Install Image 3</label>
+                        <input type="file" id="cmpImage3" accept="image/*" style="padding:8px;">
+                        <div id="cmpImage3Preview" class="img-preview-box"></div>
+                    </div>
+
+                    <!-- Section: Customer Sign Off -->
+                    <div class="form-section-title">Customer Sign Off</div>
+                    <div class="signoff-disclaimer">
+                        By typing your full name below and submitting this form, you confirm that your electronic signature is legally binding, that you have read and agree to all applicable terms and conditions, and that all information provided is true and accurate to the best of your knowledge. You understand any outstanding items from this form that need to be completed will be followed up by your AIO buddy and completed at a later date.
+                    </div>
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>First Name <span class="req">*</span></label>
+                            <input type="text" id="cmpCustFirst" required placeholder="First name">
+                        </div>
+                        <div class="form-row">
+                            <label>Last Name <span class="req">*</span></label>
+                            <input type="text" id="cmpCustLast" required placeholder="Last name">
+                        </div>
+                    </div>
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Your Email <span class="req">*</span></label>
+                            <input type="email" id="cmpCustEmail" required placeholder="email@example.com">
+                        </div>
+                        <div class="form-row">
+                            <label>Your Contact Number <span class="req">*</span></label>
+                            <input type="tel" id="cmpCustPhone" required placeholder="Phone number">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <label>Signature <span class="req">*</span></label>
+                        <div class="signature-pad-wrapper">
+                            <canvas id="signaturePad"></canvas>
+                        </div>
+                        <div class="signature-actions">
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="clearSignature()">Clear Signature</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -508,6 +741,89 @@
             }
         }
 
+        function toggleDetail(sel, detailId) {
+            const row = document.getElementById(detailId + 'Row');
+            if (sel.value === 'No') { row.classList.remove('hidden'); } else { row.classList.add('hidden'); }
+        }
+
+        function getCheckedValues(prefix) {
+            return Array.from(document.querySelectorAll(`input[id^="${prefix}_"]:checked`)).map(cb => cb.value);
+        }
+
+        // Image preview for individual uploads
+        ['cmpImage1','cmpImage2','cmpImage3'].forEach(id => {
+            document.addEventListener('change', function(e) {
+                if (e.target.id === id) {
+                    const preview = document.getElementById(id + 'Preview');
+                    preview.innerHTML = '';
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                            const img = document.createElement('img');
+                            img.src = ev.target.result;
+                            preview.appendChild(img);
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                }
+            });
+        });
+
+        // ── Signature Pad ──
+        let sigCanvas, sigCtx, sigDrawing = false;
+
+        function initSignaturePad() {
+            sigCanvas = document.getElementById('signaturePad');
+            if (!sigCanvas) return;
+            sigCtx = sigCanvas.getContext('2d');
+            // Set canvas actual resolution
+            const rect = sigCanvas.getBoundingClientRect();
+            sigCanvas.width = rect.width * 2;
+            sigCanvas.height = rect.height * 2;
+            sigCtx.scale(2, 2);
+            sigCtx.strokeStyle = '#1a1f36';
+            sigCtx.lineWidth = 2;
+            sigCtx.lineCap = 'round';
+            sigCtx.lineJoin = 'round';
+
+            function getPos(e) {
+                const r = sigCanvas.getBoundingClientRect();
+                const touch = e.touches ? e.touches[0] : e;
+                return { x: touch.clientX - r.left, y: touch.clientY - r.top };
+            }
+
+            sigCanvas.addEventListener('mousedown', e => { sigDrawing = true; sigCtx.beginPath(); const p = getPos(e); sigCtx.moveTo(p.x, p.y); });
+            sigCanvas.addEventListener('mousemove', e => { if (!sigDrawing) return; const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); });
+            sigCanvas.addEventListener('mouseup', () => { sigDrawing = false; });
+            sigCanvas.addEventListener('mouseleave', () => { sigDrawing = false; });
+            // Touch support
+            sigCanvas.addEventListener('touchstart', e => { e.preventDefault(); sigDrawing = true; sigCtx.beginPath(); const p = getPos(e); sigCtx.moveTo(p.x, p.y); });
+            sigCanvas.addEventListener('touchmove', e => { e.preventDefault(); if (!sigDrawing) return; const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); });
+            sigCanvas.addEventListener('touchend', e => { e.preventDefault(); sigDrawing = false; });
+        }
+
+        function clearSignature() {
+            if (sigCanvas && sigCtx) {
+                sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+            }
+        }
+
+        function isSignatureEmpty() {
+            if (!sigCanvas) return true;
+            const ctx = sigCanvas.getContext('2d');
+            const data = ctx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > 0) return false;
+            }
+            return true;
+        }
+
+        function getSignatureData() {
+            if (!sigCanvas || isSignatureEmpty()) return null;
+            return sigCanvas.toDataURL('image/png');
+        }
+
         function openCompleteForm() {
             if (!currentBooking) return;
             const b = currentBooking;
@@ -516,37 +832,126 @@
                 <strong>${b.company_name || b.title}</strong>
                 ${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | ${b.user_name || 'Unassigned'}
             `;
-            document.getElementById("completeBy").value = currentUser ? currentUser.name : '';
-            document.getElementById("completeHardware").value = '';
-            document.getElementById("completeStations").value = '';
-            document.getElementById("completeMenuSetup").value = '';
-            document.getElementById("completeTraining").checked = false;
-            document.getElementById("completeGoLive").checked = false;
-            document.getElementById("completeIssues").value = '';
-            document.getElementById("completeNotes").value = '';
+            // Pre-fill from booking data
+            document.getElementById("cmpCompany").value = b.company_name || b.title || '';
+            // Reset all fields
+            document.getElementById("cmpInstallComplete").value = '';
+            document.getElementById("cmpDeployNotes").value = '';
+            document.getElementById("cmpNetworkDetails").value = '';
+            document.getElementById("cmpNetworkExplained").value = '';
+            document.getElementById("cmpPrintersWorking").value = '';
+            document.getElementById("cmpStationAreas").value = '';
+            document.getElementById("cmpStationDetail").value = '';
+            document.getElementById("cmpStationDetailRow").classList.add('hidden');
+            document.getElementById("cmpPaymentTerminals").value = '';
+            document.getElementById("cmpPaymentDetail").value = '';
+            document.getElementById("cmpPaymentDetailRow").classList.add('hidden');
+            document.getElementById("cmpCashDrawers").value = '';
+            document.getElementById("cmpCashDetail").value = '';
+            document.getElementById("cmpCashDetailRow").classList.add('hidden');
+            document.getElementById("cmpKDS").value = '';
+            document.getElementById("cmpKDSDetail").value = '';
+            document.getElementById("cmpKDSDetailRow").classList.add('hidden');
+            document.getElementById("cmpKiosks").value = '';
+            document.getElementById("cmpKioskDetail").value = '';
+            document.getElementById("cmpKioskDetailRow").classList.add('hidden');
+            document.getElementById("cmpFOHTraining").value = '';
+            document.getElementById("cmpFOHDetails").value = '';
+            document.getElementById("cmpFOHDetailsRow").classList.add('hidden');
+            document.querySelectorAll('input[id^="foh_"]').forEach(cb => cb.checked = false);
+            document.getElementById("cmpBOHTraining").value = '';
+            document.getElementById("cmpBOHDetails").value = '';
+            document.getElementById("cmpBOHDetailsRow").classList.add('hidden');
+            document.querySelectorAll('input[id^="boh_"]').forEach(cb => cb.checked = false);
+            document.getElementById("cmpSupportConfirm").checked = false;
+            document.getElementById("cmpFollowUp").value = '';
+            document.getElementById("cmpImage1").value = '';
+            document.getElementById("cmpImage2").value = '';
+            document.getElementById("cmpImage3").value = '';
+            document.getElementById("cmpImage1Preview").innerHTML = '';
+            document.getElementById("cmpImage2Preview").innerHTML = '';
+            document.getElementById("cmpImage3Preview").innerHTML = '';
+            // Pre-fill customer info from booking contact if available
+            document.getElementById("cmpCustFirst").value = b.contact_name ? b.contact_name.split(' ')[0] || '' : '';
+            document.getElementById("cmpCustLast").value = b.contact_name ? b.contact_name.split(' ').slice(1).join(' ') || '' : '';
+            document.getElementById("cmpCustEmail").value = b.contact_email || '';
+            document.getElementById("cmpCustPhone").value = b.contact_phone || '';
             closeModal();
             document.getElementById("completeModal").classList.add("open");
+            // Init signature pad after modal is visible
+            setTimeout(initSignaturePad, 100);
         }
 
         function closeCompleteModal() {
             document.getElementById("completeModal").classList.remove("open");
         }
 
+        async function readFileAsDataURL(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.readAsDataURL(file);
+            });
+        }
+
         async function submitComplete() {
             if (!currentBooking) return;
+            // Validate required fields
+            const installComplete = document.getElementById("cmpInstallComplete").value;
+            const custFirst = document.getElementById("cmpCustFirst").value.trim();
+            const custLast = document.getElementById("cmpCustLast").value.trim();
+            const custEmail = document.getElementById("cmpCustEmail").value.trim();
+            const custPhone = document.getElementById("cmpCustPhone").value.trim();
+
+            if (!installComplete) { alert("Please select if install is complete."); return; }
+            if (!custFirst || !custLast || !custEmail || !custPhone) { alert("Please fill in all Customer Sign Off fields."); return; }
+            if (isSignatureEmpty()) { alert("Please provide a signature."); return; }
+
             const btn = document.getElementById("submitCompleteBtn");
             btn.disabled = true;
             btn.textContent = "Submitting...";
 
+            // Convert images to base64
+            const images = [];
+            for (const id of ['cmpImage1', 'cmpImage2', 'cmpImage3']) {
+                const file = document.getElementById(id).files[0];
+                if (file) {
+                    const b64 = await readFileAsDataURL(file);
+                    images.push({ name: file.name, data: b64 });
+                }
+            }
+
             const payload = {
-                hardware_installed: document.getElementById("completeHardware").value,
-                num_stations: document.getElementById("completeStations").value,
-                menu_setup: document.getElementById("completeMenuSetup").value,
-                training_completed: document.getElementById("completeTraining").checked,
-                system_live: document.getElementById("completeGoLive").checked,
-                issues: document.getElementById("completeIssues").value,
-                completion_notes: document.getElementById("completeNotes").value,
-                completed_by: document.getElementById("completeBy").value,
+                company_name: document.getElementById("cmpCompany").value,
+                install_complete: installComplete,
+                deployment_notes: document.getElementById("cmpDeployNotes").value,
+                network_details: document.getElementById("cmpNetworkDetails").value,
+                network_explained: document.getElementById("cmpNetworkExplained").value,
+                printers_working: document.getElementById("cmpPrintersWorking").value,
+                station_areas: document.getElementById("cmpStationAreas").value,
+                station_areas_detail: document.getElementById("cmpStationDetail").value,
+                payment_terminals: document.getElementById("cmpPaymentTerminals").value,
+                payment_terminals_detail: document.getElementById("cmpPaymentDetail").value,
+                cash_drawers: document.getElementById("cmpCashDrawers").value,
+                cash_drawers_detail: document.getElementById("cmpCashDetail").value,
+                kds: document.getElementById("cmpKDS").value,
+                kds_detail: document.getElementById("cmpKDSDetail").value,
+                kiosks: document.getElementById("cmpKiosks").value,
+                kiosks_detail: document.getElementById("cmpKioskDetail").value,
+                foh_training: document.getElementById("cmpFOHTraining").value,
+                foh_details: document.getElementById("cmpFOHDetails").value,
+                foh_areas: getCheckedValues('foh'),
+                boh_training: document.getElementById("cmpBOHTraining").value,
+                boh_details: document.getElementById("cmpBOHDetails").value,
+                boh_areas: getCheckedValues('boh'),
+                support_confirmed: document.getElementById("cmpSupportConfirm").checked,
+                follow_up: document.getElementById("cmpFollowUp").value,
+                images: images,
+                signature: getSignatureData(),
+                customer_first_name: custFirst,
+                customer_last_name: custLast,
+                customer_email: custEmail,
+                customer_phone: custPhone,
             };
 
             try {
