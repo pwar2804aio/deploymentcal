@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.8.0"
+VERSION = "2.8.1"
 
 app = Flask(__name__)
 
@@ -790,6 +790,19 @@ def create_booking():
                     }],
                 })
 
+            # Update Install Date on deal and company
+            try:
+                install_date = datetime.fromisoformat(data["start_datetime"]).strftime("%Y-%m-%d")
+                hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                    "properties": {"install_date_new": install_date}
+                })
+                if data.get("hubspot_company_id"):
+                    hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
+                        "properties": {"migrated_00npw00000fv4pz2ad": install_date}
+                    })
+            except Exception:
+                pass  # Don't fail booking if date update fails
+
             result["hubspot_note"] = "sent"
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
@@ -830,6 +843,21 @@ def update_booking(bid):
     cur.close()
 
     result = {"ok": True}
+
+    # Clear Install Date on cancellation
+    if data.get("status") == "cancelled" and HUBSPOT_API_KEY:
+        try:
+            if data.get("hubspot_deal_id"):
+                hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                    "properties": {"install_date_new": ""}
+                })
+            if data.get("hubspot_company_id"):
+                hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
+                    "properties": {"migrated_00npw00000fv4pz2ad": ""}
+                })
+        except Exception:
+            pass
+
     # Send cancellation email
     if data.get("status") == "cancelled" and SENDGRID_API_KEY:
         try:
