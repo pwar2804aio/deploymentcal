@@ -715,7 +715,7 @@
                         <option value="">Unassigned</option>
                         ${allUsers.map(function(u){ return '<option value="' + u.id + '"' + (u.id == b.user_id ? ' selected' : '') + '>' + u.name + '</option>'; }).join('')}
                     </select>
-                    <button type="button" class="btn btn-primary btn-sm" onclick="reassignBooking()" id="reassignBtn" style="display:none;">Save</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="reassignBooking()" id="reassignBtn">Save</button>
                 </div></div>
                 ${b.company_name ? `<div class="field"><div class="field-label">Company</div><div class="field-value">${b.company_name}</div></div>` : ''}
                 ${b.contact_name ? `<div class="field"><div class="field-label">Contact</div><div class="field-value">${b.contact_name}${b.contact_email ? ' - ' + b.contact_email : ''}${b.contact_phone ? ' - ' + b.contact_phone : ''}</div></div>` : ''}
@@ -724,14 +724,6 @@
                 ${b.hubspot_deal_id ? `<div class="field"><div class="field-label">HubSpot</div><div class="field-value"><a href="https://app.hubspot.com/contacts/deals/${b.hubspot_deal_id}" target="_blank" style="color:var(--primary)">View Deal</a></div></div>` : ''}
             `;
             document.getElementById("viewModal").classList.add("open");
-            // Show save button when assignment changes
-            const sel = document.getElementById("reassignSelect");
-            if (sel) {
-                sel.addEventListener("change", function() {
-                    const changed = (sel.value || '') !== (String(b.user_id) || '');
-                    document.getElementById("reassignBtn").style.display = changed ? '' : 'none';
-                });
-            }
         }
 
         async function reassignBooking() {
