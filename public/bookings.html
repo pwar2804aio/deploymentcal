@@ -710,7 +710,13 @@
             document.getElementById("viewBody").innerHTML = `
                 <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${b.status || 'confirmed'}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
-                <div class="field"><div class="field-label">Assigned To</div><div class="field-value"><span class="user-dot" style="background:${b.user_color || '#3788d8'}"></span>${b.user_name || 'Unassigned'}</div></div>
+                <div class="field"><div class="field-label">Assigned To</div><div class="field-value" style="display:flex;align-items:center;gap:8px;">
+                    <select id="reassignSelect" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;">
+                        <option value="">Unassigned</option>
+                        ${allUsers.map(function(u){ return '<option value="' + u.id + '"' + (u.id == b.user_id ? ' selected' : '') + '>' + u.name + '</option>'; }).join('')}
+                    </select>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="reassignBooking()" id="reassignBtn" style="display:none;">Save</button>
+                </div></div>
                 ${b.company_name ? `<div class="field"><div class="field-label">Company</div><div class="field-value">${b.company_name}</div></div>` : ''}
                 ${b.contact_name ? `<div class="field"><div class="field-label">Contact</div><div class="field-value">${b.contact_name}${b.contact_email ? ' - ' + b.contact_email : ''}${b.contact_phone ? ' - ' + b.contact_phone : ''}</div></div>` : ''}
                 ${b.address ? `<div class="field"><div class="field-label">Address</div><div class="field-value">${b.address}</div></div>` : ''}
@@ -718,6 +724,55 @@
                 ${b.hubspot_deal_id ? `<div class="field"><div class="field-label">HubSpot</div><div class="field-value"><a href="https://app.hubspot.com/contacts/deals/${b.hubspot_deal_id}" target="_blank" style="color:var(--primary)">View Deal</a></div></div>` : ''}
             `;
             document.getElementById("viewModal").classList.add("open");
+            // Show save button when assignment changes
+            const sel = document.getElementById("reassignSelect");
+            if (sel) {
+                sel.addEventListener("change", function() {
+                    const changed = (sel.value || '') !== (String(b.user_id) || '');
+                    document.getElementById("reassignBtn").style.display = changed ? '' : 'none';
+                });
+            }
+        }
+
+        async function reassignBooking() {
+            if (!currentBooking) return;
+            const b = currentBooking;
+            const newUserId = document.getElementById("reassignSelect").value || null;
+            const btn = document.getElementById("reassignBtn");
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+            try {
+                const res = await fetch(`/api/bookings/${b.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: b.title, booking_type: b.booking_type,
+                        start_datetime: b.start_datetime, end_datetime: b.end_datetime,
+                        user_id: newUserId, company_name: b.company_name,
+                        hubspot_deal_id: b.hubspot_deal_id, hubspot_company_id: b.hubspot_company_id,
+                        deal_stage: b.deal_stage, contact_name: b.contact_name,
+                        contact_email: b.contact_email, contact_phone: b.contact_phone,
+                        address: b.address, notes: b.notes, status: b.status
+                    }),
+                });
+                if (res.ok) {
+                    btn.textContent = "Saved!";
+                    btn.style.background = "var(--success)";
+                    // Update local data
+                    const newUser = allUsers.find(u => u.id == newUserId);
+                    b.user_id = newUserId;
+                    b.user_name = newUser ? newUser.name : null;
+                    b.user_color = newUser ? newUser.color : null;
+                    renderTable();
+                    setTimeout(() => { btn.style.display = 'none'; btn.textContent = 'Save'; btn.style.background = ''; btn.disabled = false; }, 1500);
+                } else {
+                    btn.textContent = "Error";
+                    btn.disabled = false;
+                }
+            } catch(e) {
+                btn.textContent = "Error";
+                btn.disabled = false;
+            }
         }
 
         function closeModal() {
