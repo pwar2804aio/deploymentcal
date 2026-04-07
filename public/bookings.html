@@ -976,6 +976,32 @@
             });
         }
 
+        // Compress image to max 1600px wide, JPEG 0.75 quality
+        async function compressImage(file, maxDim = 1600, quality = 0.75) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        let w = img.width, h = img.height;
+                        if (w > maxDim || h > maxDim) {
+                            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                            else { w = Math.round(w * maxDim / h); h = maxDim; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
         async function submitComplete() {
             if (!currentBooking) return;
             // Validate required fields
@@ -993,13 +1019,17 @@
             btn.disabled = true;
             btn.textContent = "Submitting...";
 
-            // Convert images to base64
+            // Compress and convert images to base64 (prevents hitting Vercel's 4.5MB body limit)
             const images = [];
             for (const id of ['cmpImage1', 'cmpImage2', 'cmpImage3']) {
                 const file = document.getElementById(id).files[0];
                 if (file) {
-                    const b64 = await readFileAsDataURL(file);
-                    images.push({ name: file.name, data: b64 });
+                    try {
+                        const b64 = await compressImage(file);
+                        images.push({ name: file.name.replace(/\.[^.]+$/, '.jpg'), data: b64 });
+                    } catch (err) {
+                        console.error("Image compression failed", err);
+                    }
                 }
             }
 
@@ -1037,21 +1067,30 @@
             };
 
             try {
+                const bodyStr = JSON.stringify(payload);
+                const sizeMB = (bodyStr.length / 1024 / 1024).toFixed(2);
+                if (bodyStr.length > 4000000) {
+                    alert("Request too large (" + sizeMB + " MB). Please use fewer/smaller images.");
+                    btn.disabled = false;
+                    btn.textContent = "Mark as Deployed";
+                    return;
+                }
                 const res = await fetch(`/api/bookings/${currentBooking.id}/complete`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
+                    body: bodyStr,
                 });
-                const data = await res.json();
+                let data = {};
+                try { data = await res.json(); } catch(_) {}
                 if (res.ok) {
                     closeCompleteModal();
                     loadBookings();
                     alert("Deployment marked as complete!");
                 } else {
-                    alert(data.error || "Failed to complete deployment");
+                    alert("Failed (" + res.status + "): " + (data.error || res.statusText || "Unknown error"));
                 }
             } catch (e) {
-                alert("Error: " + e.message);
+                alert("Network error: " + e.message + "\n\nTry fewer/smaller images or check your connection.");
             }
             btn.disabled = false;
             btn.textContent = "Mark as Deployed";
