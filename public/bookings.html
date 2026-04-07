@@ -831,7 +831,11 @@
             return Array.from(document.querySelectorAll(`input[id^="${prefix}_"]:checked`)).map(cb => cb.value);
         }
 
-        // Image preview for individual uploads
+        // Image preview + remove for individual uploads
+        function removeImage(id) {
+            document.getElementById(id).value = '';
+            document.getElementById(id + 'Preview').innerHTML = '';
+        }
         ['cmpImage1','cmpImage2','cmpImage3'].forEach(id => {
             document.addEventListener('change', function(e) {
                 if (e.target.id === id) {
@@ -841,9 +845,19 @@
                     if (file) {
                         const reader = new FileReader();
                         reader.onload = ev => {
+                            const wrap = document.createElement('div');
+                            wrap.style.cssText = 'position:relative;display:inline-block;';
                             const img = document.createElement('img');
                             img.src = ev.target.result;
-                            preview.appendChild(img);
+                            const rm = document.createElement('button');
+                            rm.type = 'button';
+                            rm.textContent = '×';
+                            rm.title = 'Remove image';
+                            rm.onclick = () => removeImage(id);
+                            rm.style.cssText = 'position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:none;background:#e8481e;color:#fff;font-size:16px;font-weight:700;line-height:1;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;padding:0;';
+                            wrap.appendChild(img);
+                            wrap.appendChild(rm);
+                            preview.appendChild(wrap);
                         };
                         reader.readAsDataURL(file);
                     }
