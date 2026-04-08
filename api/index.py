@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.10.1"
+VERSION = "2.10.2"
 
 app = Flask(__name__)
 
