@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onboarding Form - AIO</title>
+    <style>
+        :root {
+            --primary: #ff5c35;
+            --primary-dark: #e8481e;
+            --bg: #f5f8fa;
+            --card: #ffffff;
+            --border: #e5e8ed;
+            --text: #1a1f36;
+            --text-muted: #6b7c93;
+            --success: #00c48c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 24px 16px; }
+        .container { max-width: 680px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 24px; }
+        .header img { height: 48px; margin-bottom: 12px; }
+        .header h1 { font-size: 24px; color: var(--text); }
+        .header .sub { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+        .card { background: var(--card); border-radius: 12px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .section { margin-bottom: 28px; }
+        .section h2 { font-size: 16px; color: var(--primary); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+        .field input, .field textarea, .field select {
+            width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit;
+        }
+        .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--primary); }
+        .field textarea { min-height: 80px; resize: vertical; }
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 600px) { .field-row { grid-template-columns: 1fr; } }
+        .btn { display: inline-block; padding: 14px 28px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; }
+        .btn:hover { background: var(--primary-dark); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .info-banner { background: #f0fdf4; border-left: 4px solid var(--success); padding: 14px 16px; margin-bottom: 20px; border-radius: 6px; font-size: 14px; color: #065f46; }
+        .error-banner { background: #fef2f2; border-left: 4px solid #dc2626; padding: 14px 16px; margin-bottom: 20px; border-radius: 6px; font-size: 14px; color: #991b1b; }
+        .booking-summary { background: #f9fafb; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: var(--text-muted); }
+        .booking-summary strong { color: var(--text); font-weight: 600; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/aio-logo.png" alt="AIO" onerror="this.style.display='none'">
+            <h1>Onboarding Form</h1>
+            <div class="sub">Please complete this form before your onboarding call</div>
+        </div>
+
+        <div id="loadingState" class="card" style="text-align:center;padding:60px 20px;">
+            <div style="color:var(--text-muted);">Loading…</div>
+        </div>
+
+        <div id="errorState" class="card hidden">
+            <div class="error-banner" id="errorMessage">Invalid or expired link.</div>
+        </div>
+
+        <div id="submittedState" class="card hidden">
+            <div class="info-banner">
+                ✓ Thank you! Your onboarding form has been submitted. Your AIO Buddy will be in touch shortly.
+            </div>
+        </div>
+
+        <div id="formState" class="card hidden">
+            <div class="booking-summary" id="bookingSummary"></div>
+
+            <form id="onboardingForm" onsubmit="event.preventDefault(); submitForm();">
+                <div class="section">
+                    <h2>Your Details</h2>
+                    <div class="field-row">
+                        <div class="field">
+                            <label>Your Name</label>
+                            <input type="text" id="contact_name" required>
+                        </div>
+                        <div class="field">
+                            <label>Role / Job Title</label>
+                            <input type="text" id="role">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field">
+                            <label>Email</label>
+                            <input type="email" id="contact_email" required>
+                        </div>
+                        <div class="field">
+                            <label>Phone</label>
+                            <input type="tel" id="contact_phone">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>Business Details</h2>
+                    <div class="field">
+                        <label>Number of Locations</label>
+                        <input type="number" id="num_locations" min="1">
+                    </div>
+                    <div class="field">
+                        <label>Average Daily Transactions</label>
+                        <input type="number" id="daily_transactions" min="0">
+                    </div>
+                    <div class="field">
+                        <label>Current POS / EPOS System (if any)</label>
+                        <input type="text" id="current_pos">
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>What You're Hoping to Achieve</h2>
+                    <div class="field">
+                        <label>Main goals for using AIO</label>
+                        <textarea id="goals" placeholder="e.g. faster service, integrated reporting, online ordering..."></textarea>
+                    </div>
+                    <div class="field">
+                        <label>Any specific challenges we should know about?</label>
+                        <textarea id="challenges"></textarea>
+                    </div>
+                    <div class="field">
+                        <label>Questions you'd like answered on the call</label>
+                        <textarea id="questions"></textarea>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+                        Note: This is a placeholder form. Final fields will be confirmed once we have your spec.
+                    </p>
+                    <button type="submit" class="btn" id="submitBtn">Submit Onboarding Form</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const token = window.location.pathname.split("/").pop();
+        let booking = null;
+
+        async function loadBooking() {
+            try {
+                const res = await fetch("/api/public/onboarding/" + token);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    showError(err.error || "Invalid or expired link.");
+                    return;
+                }
+                booking = await res.json();
+                if (booking.customer_form_submitted_at) {
+                    document.getElementById("loadingState").classList.add("hidden");
+                    document.getElementById("submittedState").classList.remove("hidden");
+                    return;
+                }
+                renderForm();
+            } catch (e) {
+                showError("Could not load form. Please try again.");
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById("loadingState").classList.add("hidden");
+            document.getElementById("errorMessage").textContent = msg;
+            document.getElementById("errorState").classList.remove("hidden");
+        }
+
+        function renderForm() {
+            const start = new Date(booking.start_datetime);
+            const dateStr = start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById("bookingSummary").innerHTML =
+                "<strong>" + (booking.company_name || "Your booking") + "</strong><br>" +
+                "Onboarding call on <strong>" + dateStr + " at " + timeStr + "</strong>";
+
+            // Pre-fill contact details if we have them
+            if (booking.contact_name) document.getElementById("contact_name").value = booking.contact_name;
+            if (booking.contact_email) document.getElementById("contact_email").value = booking.contact_email;
+            if (booking.contact_phone) document.getElementById("contact_phone").value = booking.contact_phone;
+
+            document.getElementById("loadingState").classList.add("hidden");
+            document.getElementById("formState").classList.remove("hidden");
+        }
+
+        async function submitForm() {
+            const btn = document.getElementById("submitBtn");
+            btn.disabled = true;
+            btn.textContent = "Submitting…";
+
+            const payload = {
+                contact_name: document.getElementById("contact_name").value,
+                role: document.getElementById("role").value,
+                contact_email: document.getElementById("contact_email").value,
+                contact_phone: document.getElementById("contact_phone").value,
+                num_locations: document.getElementById("num_locations").value,
+                daily_transactions: document.getElementById("daily_transactions").value,
+                current_pos: document.getElementById("current_pos").value,
+                goals: document.getElementById("goals").value,
+                challenges: document.getElementById("challenges").value,
+                questions: document.getElementById("questions").value,
+            };
+
+            try {
+                const res = await fetch("/api/public/onboarding/" + token, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById("formState").classList.add("hidden");
+                    document.getElementById("submittedState").classList.remove("hidden");
+                    window.scrollTo(0, 0);
+                } else {
+                    alert("Failed to submit: " + (data.error || "Unknown error"));
+                    btn.disabled = false;
+                    btn.textContent = "Submit Onboarding Form";
+                }
+            } catch (e) {
+                alert("Network error: " + e.message);
+                btn.disabled = false;
+                btn.textContent = "Submit Onboarding Form";
+            }
+        }
+
+        loadBooking();
+    </script>
+</body>
+</html>

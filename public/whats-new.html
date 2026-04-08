@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What's New - Deployment Bookings</title>
+    <style>
+        :root {
+            --primary: #ff5c35;
+            --nav-bg: #2e3470;
+            --bg: #f5f8fa;
+            --card: #ffffff;
+            --border: #e5e8ed;
+            --text: #1a1f36;
+            --text-muted: #6b7c93;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+        .top-bar { background: var(--nav-bg); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .top-bar h1 { font-size: 20px; font-weight: 700; color: #fff; }
+        .top-bar nav { display: flex; align-items: center; gap: 8px; }
+        .top-bar nav a { margin-left: 16px; text-decoration: none; color: rgba(255,255,255,0.7); font-weight: 500; font-size: 14px; }
+        .top-bar nav a:hover { color: #fff; }
+        .top-bar nav a.active { color: #fff; border-bottom: 2px solid var(--primary); padding-bottom: 2px; }
+        .version-badge { font-size: 10px; color: rgba(255,255,255,0.4); margin-left: 8px; }
+
+        .container { max-width: 820px; margin: 0 auto; padding: 32px 24px; }
+        .page-header { margin-bottom: 28px; }
+        .page-header h1 { font-size: 28px; margin-bottom: 6px; }
+        .page-header .sub { color: var(--text-muted); font-size: 14px; }
+
+        .release {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px 28px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border-left: 4px solid var(--primary);
+        }
+        .release-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .release-version {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .release-date {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .release ul {
+            list-style: none;
+            padding: 0;
+        }
+        .release li {
+            padding: 6px 0 6px 22px;
+            font-size: 14px;
+            color: var(--text);
+            position: relative;
+            line-height: 1.5;
+        }
+        .release li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: 700;
+        }
+        .tag {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .tag-feature { background: #dbeafe; color: #1d4ed8; }
+        .tag-fix { background: #fee2e2; color: #991b1b; }
+        .tag-improvement { background: #d1fae5; color: #065f46; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1><img src="/aio-logo-white.png" alt="AIO" style="height:32px;vertical-align:middle;"><span class="version-badge" id="versionBadge"></span></h1>
+        <nav>
+            <a href="/">Calendar</a>
+            <a href="/bookings">Bookings</a>
+            <a href="/whats-new" class="active">What's New</a>
+            <a href="/admin">Admin</a>
+            <a href="#" onclick="doLogout()" style="color:rgba(255,255,255,0.5);">Logout</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>What's New</h1>
+            <div class="sub">Recent updates and improvements to the deployment booking system</div>
+        </div>
+
+        <div id="releaseList"></div>
+    </div>
+
+    <script>
+        // Changelog — newest first. Update this list with each release.
+        const CHANGELOG = [
+            {
+                version: "2.10.0",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "feature", text: "Added Onboarding Call booking type alongside Deployment" },
+                    { tag: "feature", text: "Booking type drives which team members are available (AIO Buddies for onboarding, Deployment Specialists for deployments)" },
+                    { tag: "feature", text: "Send onboarding form link to customer via email so they can complete it themselves" },
+                    { tag: "feature", text: "Public no-login form page for customer self-completion" },
+                    { tag: "feature", text: "Customer form submission auto-marks booking complete and pushes to HubSpot" },
+                    { tag: "feature", text: "What's New page added to navigation" },
+                ],
+            },
+            {
+                version: "2.9.9",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "feature", text: "Remove button on completion form image previews" },
+                ],
+            },
+            {
+                version: "2.9.8",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "fix", text: "Fixed 'Load failed' error when completing deployments — images are now compressed client-side before upload" },
+                    { tag: "improvement", text: "Better error messages on completion submit failures" },
+                ],
+            },
+            {
+                version: "2.9.7",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "fix", text: "Reassign specialist Save button now always visible in booking view" },
+                ],
+            },
+            {
+                version: "2.9.6",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "feature", text: "Reassign specialist dropdown in booking view" },
+                    { tag: "improvement", text: "Removed HubSpot task auto-creation (was not notifying the right people)" },
+                ],
+            },
+            {
+                version: "2.9.4",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "fix", text: "Install date now correctly saves to HubSpot deal (datetime millisecond format)" },
+                    { tag: "feature", text: "Completion form rebuilt to match Deployment Sign Off document with hardware checks, training sign-off, customer signature and photos" },
+                    { tag: "feature", text: "Deployed bookings shown in a separate section on the bookings page" },
+                    { tag: "fix", text: "Bookings page no longer breaks on certain templates" },
+                    { tag: "fix", text: "Mark as Deployed button now works reliably" },
+                ],
+            },
+        ];
+
+        function tagHtml(tag) {
+            const map = { feature: 'New', fix: 'Fix', improvement: 'Improved' };
+            const cls = 'tag-' + tag;
+            return '<span class="tag ' + cls + '">' + (map[tag] || tag) + '</span>';
+        }
+
+        function render() {
+            const list = document.getElementById("releaseList");
+            list.innerHTML = CHANGELOG.map(r => {
+                const items = r.changes.map(c => '<li>' + tagHtml(c.tag) + c.text + '</li>').join('');
+                return (
+                    '<div class="release">' +
+                        '<div class="release-header">' +
+                            '<div class="release-version">v' + r.version + '</div>' +
+                            '<div class="release-date">' + r.date + '</div>' +
+                        '</div>' +
+                        '<ul>' + items + '</ul>' +
+                    '</div>'
+                );
+            }).join('');
+        }
+
+        async function loadVersion() {
+            try {
+                const res = await fetch("/api/version");
+                const d = await res.json();
+                document.getElementById("versionBadge").textContent = "v" + d.version;
+            } catch (e) {}
+        }
+
+        async function doLogout() {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+        }
+
+        // Auth check
+        (async function() {
+            try {
+                const res = await fetch("/api/auth/me");
+                const data = await res.json();
+                if (!data.user) { window.location.href = "/login"; return; }
+            } catch (e) { window.location.href = "/login"; return; }
+            render();
+            loadVersion();
+        })();
+    </script>
+</body>
+</html>

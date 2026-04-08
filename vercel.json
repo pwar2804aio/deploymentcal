@@ -28,6 +28,14 @@
       "dest": "public/bookings.html"
     },
     {
+      "src": "/whats-new",
+      "dest": "public/whats-new.html"
+    },
+    {
+      "src": "/onboarding/(.*)",
+      "dest": "public/onboarding.html"
+    },
+    {
       "src": "/(.*\\.(?:png|jpg|jpeg|svg|ico|css|js))",
       "dest": "public/$1"
     },

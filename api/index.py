@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.9.9"
+VERSION = "2.10.0"
 
 app = Flask(__name__)
 
@@ -127,6 +127,31 @@ def init_db(conn):
     cur.execute("""
         DO $$ BEGIN
             ALTER TABLE users ADD COLUMN hubspot_owner_id TEXT;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
+    # Customer self-completion token for onboarding form
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE bookings ADD COLUMN customer_form_token TEXT;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE bookings ADD COLUMN customer_form_sent_at TIMESTAMP;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE bookings ADD COLUMN customer_form_submitted_at TIMESTAMP;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE bookings ADD COLUMN form_responses TEXT;
         EXCEPTION WHEN duplicate_column THEN NULL;
         END $$;
     """)
@@ -577,19 +602,30 @@ def delete_timeoff(uid, tid):
 
 # ── Round Robin Assignment ─────────��─────────────────────────────────────────
 
+def _roles_for_booking_type(booking_type):
+    """Map booking type to allowed user roles."""
+    if booking_type == "onboarding":
+        return ["aio_buddy"]
+    # Default = deployment
+    return ["deployment_specialist", "installer", "trainer", "lead"]
+
+
 @app.route("/api/available-days")
 @require_auth
 def available_days():
     """Return which days of week (0=Mon..6=Sun) have at least one available user."""
+    booking_type = request.args.get("booking_type", "install")
+    roles = _roles_for_booking_type(booking_type)
     db = get_db()
     cur = db.cursor()
-    cur.execute("""
+    placeholders = ",".join(["%s"] * len(roles))
+    cur.execute(f"""
         SELECT DISTINCT a.day_of_week
         FROM availability a
         JOIN users u ON u.id = a.user_id
-        WHERE u.active = 1
+        WHERE u.active = 1 AND u.role IN ({placeholders})
         ORDER BY a.day_of_week
-    """)
+    """, roles)
     days = [row[0] for row in cur.fetchall()]
     cur.close()
     return jsonify({"days": days})
@@ -599,22 +635,25 @@ def available_days():
 @require_auth
 def round_robin():
     date_str = request.args.get("date")  # YYYY-MM-DD
+    booking_type = request.args.get("booking_type", "install")
     if not date_str:
         return jsonify({"error": "date parameter required"}), 400
 
     target_date = datetime.strptime(date_str, "%Y-%m-%d")
     dow = target_date.weekday()  # Mon=0..Sun=6
+    roles = _roles_for_booking_type(booking_type)
 
     db = get_db()
     cur = db.cursor()
 
-    # Get active users who have availability on this day of week
-    cur.execute("""
+    # Get active users who have availability on this day of week and a matching role
+    placeholders = ",".join(["%s"] * len(roles))
+    cur.execute(f"""
         SELECT u.id, u.name, u.email, u.role, u.color
         FROM users u
         JOIN availability a ON a.user_id = u.id AND a.day_of_week = %s
-        WHERE u.active = 1
-    """, (dow,))
+        WHERE u.active = 1 AND u.role IN ({placeholders})
+    """, (dow, *roles))
     available_users = dict_row(cur)
 
     if not available_users:
@@ -1043,6 +1082,229 @@ def complete_booking(bid):
             result["hubspot_note"] = f"error: {str(e)}"
 
     return jsonify(result)
+
+
+# ── Onboarding Customer Self-Completion ──────────────────────────────────────
+
+@app.route("/api/bookings/<bid>/customer-link", methods=["POST"])
+@require_auth
+def generate_customer_link(bid):
+    """Generate (or rotate) a customer-facing token for self-completion of the onboarding form."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT id, customer_form_token FROM bookings WHERE id = %s", (bid,))
+    row = dict_one(cur)
+    if not row:
+        cur.close()
+        return jsonify({"error": "Booking not found"}), 404
+    token = row.get("customer_form_token") or secrets.token_urlsafe(32)
+    cur.execute("UPDATE bookings SET customer_form_token = %s WHERE id = %s", (token, bid))
+    db.commit()
+    cur.close()
+    base = request.host_url.rstrip("/")
+    return jsonify({"token": token, "url": f"{base}/onboarding/{token}"})
+
+
+@app.route("/api/bookings/<bid>/customer-link/email", methods=["POST"])
+@require_auth
+def email_customer_link(bid):
+    """Generate (if needed) and email the public onboarding form link to the customer."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bookings WHERE id = %s", (bid,))
+    booking = dict_one(cur)
+    if not booking:
+        cur.close()
+        return jsonify({"error": "Booking not found"}), 404
+
+    if not booking.get("contact_email"):
+        cur.close()
+        return jsonify({"error": "Booking has no contact email"}), 400
+
+    token = booking.get("customer_form_token") or secrets.token_urlsafe(32)
+    cur.execute(
+        "UPDATE bookings SET customer_form_token = %s, customer_form_sent_at = NOW() WHERE id = %s",
+        (token, bid),
+    )
+    db.commit()
+    cur.close()
+
+    if not SENDGRID_API_KEY:
+        return jsonify({"error": "SendGrid not configured"}), 500
+
+    base = request.host_url.rstrip("/")
+    link = f"{base}/onboarding/{token}"
+    contact_name = booking.get("contact_name") or "there"
+    company = booking.get("company_name") or ""
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1f36;">
+        <h2 style="color:#ff5c35;">Onboarding Form for {company}</h2>
+        <p>Hi {contact_name},</p>
+        <p>Thanks for choosing AIO. Please complete the short onboarding form below at your convenience so we can prepare for your call.</p>
+        <p style="margin:24px 0;">
+            <a href="{link}" style="background:#ff5c35;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;">Complete Onboarding Form</a>
+        </p>
+        <p style="font-size:12px;color:#6b7c93;">Or paste this link into your browser: <br><a href="{link}">{link}</a></p>
+        <p>Thanks,<br>The AIO Team</p>
+    </div>
+    """
+    sg_payload = {
+        "personalizations": [{"to": [{"email": booking["contact_email"]}]}],
+        "from": {"email": EMAIL_FROM},
+        "subject": f"Onboarding form for {company}".strip(),
+        "content": [{"type": "text/html", "value": html}],
+    }
+    try:
+        resp = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+            json=sg_payload,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        return jsonify({"error": f"Email failed: {str(e)}"}), 500
+
+    return jsonify({"ok": True, "url": link})
+
+
+@app.route("/api/public/onboarding/<token>", methods=["GET"])
+def public_onboarding_get(token):
+    """Public endpoint (no auth) - returns minimal booking info for the customer form."""
+    if not token:
+        return jsonify({"error": "Missing token"}), 400
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT id, title, company_name, contact_name, contact_email, contact_phone,
+               start_datetime, end_datetime, status, customer_form_submitted_at, booking_type
+        FROM bookings WHERE customer_form_token = %s
+    """, (token,))
+    row = dict_one(cur)
+    cur.close()
+    if not row:
+        return jsonify({"error": "Invalid or expired link"}), 404
+    return jsonify(row)
+
+
+@app.route("/api/public/onboarding/<token>", methods=["POST"])
+def public_onboarding_submit(token):
+    """Public endpoint (no auth) - customer submits their onboarding form."""
+    if not token:
+        return jsonify({"error": "Missing token"}), 400
+    data = request.json or {}
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bookings WHERE customer_form_token = %s", (token,))
+    booking = dict_one(cur)
+    if not booking:
+        cur.close()
+        return jsonify({"error": "Invalid or expired link"}), 404
+
+    if booking.get("customer_form_submitted_at"):
+        cur.close()
+        return jsonify({"error": "This form has already been submitted"}), 400
+
+    # Save responses + mark complete
+    cur.execute("""
+        UPDATE bookings
+        SET form_responses = %s, customer_form_submitted_at = NOW(), status = 'completed'
+        WHERE id = %s
+    """, (json.dumps(data), booking["id"]))
+    db.commit()
+    cur.close()
+
+    bid = booking["id"]
+    result = {"ok": True}
+
+    # Push to HubSpot — note on deal + company, mark deployment stage as deployed
+    if HUBSPOT_API_KEY and booking.get("hubspot_deal_id"):
+        try:
+            note_html = build_onboarding_note_html(booking, data)
+            note_associations = [{
+                "to": {"id": int(booking["hubspot_deal_id"])},
+                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}],
+            }]
+            if booking.get("hubspot_company_id"):
+                note_associations.append({
+                    "to": {"id": int(booking["hubspot_company_id"])},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 190}],
+                })
+            hubspot_request("POST", "/crm/v3/objects/notes", {
+                "properties": {
+                    "hs_note_body": note_html,
+                    "hs_timestamp": datetime.utcnow().isoformat() + "Z",
+                },
+                "associations": note_associations,
+            })
+            if booking.get("hubspot_company_id"):
+                hubspot_request("PATCH", f"/crm/v3/objects/companies/{booking['hubspot_company_id']}", {
+                    "properties": {"migrated_00nfi000003lzy1uac": "Active"}
+                })
+            result["hubspot_note"] = "sent"
+        except Exception as e:
+            result["hubspot_note"] = f"error: {str(e)}"
+
+    # Notify AIO Buddy + booker via email
+    if SENDGRID_API_KEY:
+        try:
+            recipients = []
+            if booking.get("user_id"):
+                cur2 = db.cursor()
+                cur2.execute("SELECT email FROM users WHERE id = %s", (booking["user_id"],))
+                u = dict_one(cur2)
+                cur2.close()
+                if u and u.get("email"):
+                    recipients.append(u["email"])
+            if ADMIN_EMAIL:
+                recipients.append(ADMIN_EMAIL)
+            recipients = list(dict.fromkeys([r for r in recipients if r]))
+            if recipients:
+                html = f"""
+                <div style="font-family:Arial,sans-serif;max-width:600px;">
+                    <h2 style="color:#16a34a;">✅ Onboarding Form Submitted</h2>
+                    <p>The customer has completed their onboarding form for <strong>{booking.get('company_name','')}</strong>.</p>
+                    <p>Booking is now marked as complete.</p>
+                </div>
+                """
+                sg_payload = {
+                    "personalizations": [{"to": [{"email": r}]} for r in recipients],
+                    "from": {"email": EMAIL_FROM},
+                    "subject": f"Onboarding submitted: {booking.get('company_name','')}",
+                    "content": [{"type": "text/html", "value": html}],
+                }
+                requests.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                    json=sg_payload,
+                )
+                result["email_sent"] = "sent"
+        except Exception as e:
+            result["email_sent"] = f"error: {str(e)}"
+
+    return jsonify(result)
+
+
+def build_onboarding_note_html(booking, responses):
+    """Build a HubSpot note from onboarding form responses. Field set is open-ended."""
+    rows = ""
+    for key, val in (responses or {}).items():
+        if val in (None, "", [], {}):
+            continue
+        label = key.replace("_", " ").title()
+        if isinstance(val, list):
+            val = ", ".join(str(v) for v in val)
+        elif isinstance(val, bool):
+            val = "Yes" if val else "No"
+        rows += f"<tr><td style='padding:6px 12px;border-bottom:1px solid #e5e8ed;font-weight:600;color:#6b7c93;'>{label}</td><td style='padding:6px 12px;border-bottom:1px solid #e5e8ed;'>{val}</td></tr>"
+    return f"""
+    <div style="font-family:Arial,sans-serif;max-width:650px;">
+        <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px;margin-bottom:20px;">
+            <h2 style="margin:0;color:#16a34a;">📋 Onboarding Form Completed by Customer</h2>
+            <p style="margin:8px 0 0;color:#6b7c93;">{booking.get('company_name','')}</p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">{rows}</table>
+    </div>
+    """
 
 
 # ── Calendar ICS ──────────────────────────────────────────────────────────────

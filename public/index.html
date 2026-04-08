@@ -273,6 +273,7 @@
         <nav>
             <a href="/" class="active">Calendar</a>
             <a href="/bookings">Bookings</a>
+            <a href="/whats-new">What's New</a>
             <a href="/admin">Admin</a>
             <a href="#" onclick="doLogout()" style="color:rgba(255,255,255,0.5);">Logout</a>
         </nav>
@@ -292,8 +293,16 @@
         <div id="step1">
             <div class="booking-card">
                 <div class="cal-panel">
-                    <h2>Book a Deployment</h2>
+                    <h2 id="bookingPanelTitle">Book a Deployment</h2>
                     <div class="cal-subtitle">Select a date to see available times</div>
+
+                    <div style="margin:12px 0 16px;">
+                        <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Booking Type</label>
+                        <select id="bookingTypeSelect" onchange="onBookingTypeChange()" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:#fff;">
+                            <option value="install">Deployment</option>
+                            <option value="onboarding">Onboarding Call</option>
+                        </select>
+                    </div>
 
                     <div class="cal-header">
                         <button onclick="prevMonth()">&larr;</button>
@@ -352,6 +361,7 @@
 
                     <input type="hidden" id="bookingTitle">
                     <input type="hidden" id="bookingType" value="install">
+                    <div id="step2TypeBadge" style="display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;margin-bottom:14px;background:#dbeafe;color:#1d4ed8;">Deployment</div>
 
                     <input type="hidden" id="bookingUser">
                     <div id="step2AssignedInfo" class="assigned-info" style="margin-bottom:14px;">
@@ -456,14 +466,45 @@
             window.location.href = "/login";
         }
 
+        function currentBookingType() {
+            const el = document.getElementById("bookingTypeSelect");
+            return el ? el.value : "install";
+        }
+
         async function loadAvailableDays() {
             try {
-                const res = await fetch("/api/available-days");
+                const res = await fetch("/api/available-days?booking_type=" + currentBookingType());
                 const data = await res.json();
                 availableDays = data.days || [];
             } catch (e) {
                 availableDays = [];
             }
+        }
+
+        async function onBookingTypeChange() {
+            // Reset selection state
+            selectedDate = null;
+            selectedStartTime = null;
+            assignedUser = null;
+            // Update title + hidden fields
+            const t = currentBookingType();
+            const isOnboarding = t === "onboarding";
+            document.getElementById("bookingPanelTitle").textContent = isOnboarding ? "Book an Onboarding Call" : "Book a Deployment";
+            document.getElementById("bookingType").value = t;
+            const badge = document.getElementById("step2TypeBadge");
+            if (badge) {
+                badge.textContent = isOnboarding ? "Onboarding Call" : "Deployment";
+                badge.style.background = isOnboarding ? "#d1fae5" : "#dbeafe";
+                badge.style.color = isOnboarding ? "#065f46" : "#1d4ed8";
+            }
+            // Reset right panel
+            document.getElementById("startTimeArea").classList.add("hidden");
+            document.getElementById("noDateSelected").classList.remove("hidden");
+            document.getElementById("selectedDateLabel").textContent = "Select a date on the calendar";
+            document.getElementById("dayBookings").innerHTML = "";
+            // Reload availability and re-render
+            await loadAvailableDays();
+            renderCalendar();
         }
 
         async function loadVersion() {
@@ -577,7 +618,7 @@
 
             // Call round-robin to assign a user for this date
             try {
-                const res = await fetch(`/api/round-robin?date=${dateStr}`);
+                const res = await fetch(`/api/round-robin?date=${dateStr}&booking_type=${currentBookingType()}`);
                 const data = await res.json();
                 if (data.user) {
                     assignedUser = data.user;
@@ -758,7 +799,8 @@
                         document.getElementById("bookingCompany").value = company.name || "";
                         document.getElementById("bookingAddress").value = [company.address, company.city, company.state, company.zip].filter(Boolean).join(", ");
                         document.getElementById("selectedCompanyId").value = company.id || "";
-                        document.getElementById("bookingTitle").value = `Deployment - ${company.name || ""}`;
+                        const typeLabel = currentBookingType() === "onboarding" ? "Onboarding Call" : "Deployment";
+                        document.getElementById("bookingTitle").value = `${typeLabel} - ${company.name || ""}`;
                     }
                 }
                 if (contactsRes.ok) {

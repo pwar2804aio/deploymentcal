@@ -207,6 +207,7 @@
         <nav>
             <a href="/">Calendar</a>
             <a href="/bookings" class="active">Bookings</a>
+            <a href="/whats-new">What's New</a>
             <a href="/admin">Admin</a>
             <a href="#" onclick="doLogout()" style="color:rgba(255,255,255,0.5);">Logout</a>
         </nav>
@@ -266,6 +267,8 @@
                 <button class="btn btn-ghost" onclick="closeModal()">Close</button>
                 <a class="btn btn-success btn-sm" id="viewIcsLink" href="#" target="_blank">Download .ics</a>
                 <button class="btn btn-primary btn-sm" onclick="sendInvite()">Send Invite</button>
+                <button class="btn btn-primary btn-sm" id="sendCustomerLinkBtn" onclick="sendCustomerLink()" style="display:none;">📧 Send Form to Customer</button>
+                <button class="btn btn-ghost btn-sm" id="copyCustomerLinkBtn" onclick="copyCustomerLink()" style="display:none;">🔗 Copy Form Link</button>
                 <button class="btn btn-success btn-sm" id="completeBtn" onclick="openCompleteForm()">✓ Complete</button>
                 <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel Booking</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
@@ -707,6 +710,11 @@
             const statusClass = b.status === 'cancelled' ? 'badge-cancelled' : 'badge-confirmed';
             document.getElementById("cancelBtn").style.display = (b.status === 'cancelled' || b.status === 'completed') ? 'none' : '';
             document.getElementById("completeBtn").style.display = (b.status === 'confirmed') ? '' : 'none';
+            // Onboarding-only customer-link buttons
+            const isOnboarding = (b.booking_type === 'onboarding');
+            const showCustomerBtns = isOnboarding && b.status === 'confirmed';
+            document.getElementById("sendCustomerLinkBtn").style.display = showCustomerBtns ? '' : 'none';
+            document.getElementById("copyCustomerLinkBtn").style.display = showCustomerBtns ? '' : 'none';
             document.getElementById("viewBody").innerHTML = `
                 <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${b.status || 'confirmed'}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
@@ -822,6 +830,49 @@
             }
         }
 
+        async function getOrCreateCustomerLink() {
+            const b = currentBooking;
+            if (!b) return null;
+            const res = await fetch(`/api/bookings/${b.id}/customer-link`, { method: "POST" });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert("Could not generate link: " + (err.error || res.status));
+                return null;
+            }
+            return await res.json();
+        }
+
+        async function sendCustomerLink() {
+            const b = currentBooking;
+            if (!b) return;
+            if (!b.contact_email) { alert("This booking has no contact email."); return; }
+            if (!confirm(`Email the onboarding form to ${b.contact_email}?`)) return;
+            const res = await fetch(`/api/bookings/${b.id}/customer-link/email`, { method: "POST" });
+            const data = await res.json();
+            if (res.ok) {
+                alert("Form link emailed to " + b.contact_email);
+            } else {
+                alert("Failed to send: " + (data.error || res.status));
+            }
+        }
+
+        async function copyCustomerLink() {
+            const link = await getOrCreateCustomerLink();
+            if (!link) return;
+            try {
+                await navigator.clipboard.writeText(link.url);
+                alert("Form link copied to clipboard:\n" + link.url);
+            } catch (e) {
+                prompt("Copy this link:", link.url);
+            }
+        }
+
+        async function openOnboardingFormForStaff() {
+            const link = await getOrCreateCustomerLink();
+            if (!link) return;
+            window.open(link.url, "_blank");
+        }
+
         function toggleDetail(sel, detailId) {
             const row = document.getElementById(detailId + 'Row');
             if (sel.value === 'No') { row.classList.remove('hidden'); } else { row.classList.add('hidden'); }
@@ -922,6 +973,12 @@
         function openCompleteForm() {
             if (!currentBooking) return;
             const b = currentBooking;
+            // For onboarding bookings, open the public form in a new tab via a one-shot link
+            // (the AIO Buddy can complete it themselves on behalf of the customer)
+            if (b.booking_type === 'onboarding') {
+                openOnboardingFormForStaff();
+                return;
+            }
             const start = new Date(b.start_datetime);
             document.getElementById("completeSummary").innerHTML = `
                 <strong>${b.company_name || b.title}</strong>
