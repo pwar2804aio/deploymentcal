@@ -636,11 +636,19 @@
                     // Build start time options from the assigned user's availability hours
                     const startH = parseInt(data.user.start_time ? data.user.start_time.split(":")[0] : "7");
                     const endH = parseInt(data.user.end_time ? data.user.end_time.split(":")[0] : "19");
+                    const isOnboarding = currentBookingType() === "onboarding";
+                    const lastH = isOnboarding ? endH - 1 : endH;
+                    const bookedHours = (data.user.booked_hours || []);
                     let opts = '<option value="">Choose a start time...</option>';
-                    for (let h = startH; h <= endH; h++) {
+                    for (let h = startH; h <= lastH; h++) {
                         const val = `${String(h).padStart(2, '0')}:00`;
                         const label = h > 12 ? `${h - 12}:00 PM` : h === 12 ? '12:00 PM' : `${h}:00 AM`;
-                        opts += `<option value="${val}">${label}</option>`;
+                        const taken = bookedHours.indexOf(h) !== -1;
+                        if (taken) {
+                            opts += `<option value="" disabled>${label} — booked</option>`;
+                        } else {
+                            opts += `<option value="${val}">${label}</option>`;
+                        }
                     }
                     document.getElementById("startTimeSelect").innerHTML = opts;
                 } else {
@@ -745,8 +753,12 @@
             const opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
             const h = parseInt(selectedStartTime.split(":")[0]);
             const timeLabel = h > 12 ? `${h-12}:00 PM` : h === 12 ? '12:00 PM' : `${h}:00 AM`;
+            const isOnboarding = currentBookingType() === "onboarding";
+            const endH = h + 1;
+            const endLabel = endH > 12 ? `${endH-12}:00 PM` : endH === 12 ? '12:00 PM' : `${endH}:00 AM`;
+            const slotLabel = isOnboarding ? `${timeLabel} – ${endLabel} (1 hour)` : `${timeLabel} (All day)`;
             document.getElementById("step2Summary").textContent =
-                `${d.toLocaleDateString('en-GB', opts)} | Start: ${timeLabel} (All day)`;
+                `${d.toLocaleDateString('en-GB', opts)} | Start: ${slotLabel}`;
 
             document.getElementById("bookingUser").value = assignedUser.id;
             document.getElementById("step2AssignedName").innerHTML =
@@ -818,11 +830,18 @@
         // ── Save booking ──
         async function saveBooking() {
             const dateStr = selectedDate.toISOString().slice(0, 10);
+            const bookingType = document.getElementById("bookingType").value;
+            // Onboarding calls are 1-hour slots; deployments block the whole day.
+            let endTime = `${dateStr}T23:59`;
+            if (bookingType === "onboarding") {
+                const sH = parseInt(selectedStartTime.split(":")[0]);
+                endTime = `${dateStr}T${String(sH + 1).padStart(2, '0')}:00`;
+            }
             const data = {
                 title: document.getElementById("bookingTitle").value,
-                booking_type: document.getElementById("bookingType").value,
+                booking_type: bookingType,
                 start_datetime: `${dateStr}T${selectedStartTime}`,
-                end_datetime: `${dateStr}T23:59`,
+                end_datetime: endTime,
                 user_id: document.getElementById("bookingUser").value,
                 company_name: document.getElementById("bookingCompany").value,
                 hubspot_deal_id: document.getElementById("selectedDealId").value || null,

@@ -115,6 +115,14 @@
         // Changelog — newest first. Update this list with each release.
         const CHANGELOG = [
             {
+                version: "2.11.1",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "fix", text: "Onboarding call times now push to HubSpot in the correct timezone (Pacific) — previously stored as midnight UTC which displayed as the day before in PDT" },
+                    { tag: "feature", text: "Onboarding calls are now 1-hour slots — multiple onboarding calls can be booked per day with the same AIO Buddy (one per hour). Already-booked hours are greyed out in the time picker." },
+                ],
+            },
+            {
                 version: "2.11.0",
                 date: "2026-04-08",
                 changes: [

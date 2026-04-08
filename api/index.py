@@ -9,12 +9,26 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 from functools import wraps
 
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo("America/Los_Angeles")
+except Exception:
+    LOCAL_TZ = None
+
 import psycopg2
 import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.11.0"
+VERSION = "2.11.1"
+
+
+def local_dt_to_ms(dt_naive):
+    """Convert a naive datetime (assumed in America/Los_Angeles) to UTC ms timestamp."""
+    if LOCAL_TZ is not None:
+        return int(dt_naive.replace(tzinfo=LOCAL_TZ).timestamp() * 1000)
+    # Fallback: assume PDT = UTC-7
+    return int((dt_naive + timedelta(hours=7)).replace(tzinfo=None).timestamp() * 1000) if False else int(dt_naive.timestamp() * 1000)
 
 app = Flask(__name__)
 
@@ -685,18 +699,20 @@ def round_robin():
         cur.close()
         return jsonify({"user": None})
 
-    # Exclude users who already have a booking on this date
+    # Deployments block the whole day; onboarding calls only block their own 1-hour slot.
     next_date = (target_date + timedelta(days=1)).strftime("%Y-%m-%d")
-    cur.execute("""
-        SELECT DISTINCT user_id FROM bookings
-        WHERE start_datetime >= %s AND start_datetime < %s
-    """, (date_str, next_date))
-    booked_ids = {row[0] for row in cur.fetchall()}
-    available_users = [u for u in available_users if u["id"] not in booked_ids]
+    if booking_type != "onboarding":
+        cur.execute("""
+            SELECT DISTINCT user_id FROM bookings
+            WHERE start_datetime >= %s AND start_datetime < %s
+              AND status != 'cancelled'
+        """, (date_str, next_date))
+        booked_ids = {row[0] for row in cur.fetchall()}
+        available_users = [u for u in available_users if u["id"] not in booked_ids]
 
-    if not available_users:
-        cur.close()
-        return jsonify({"user": None})
+        if not available_users:
+            cur.close()
+            return jsonify({"user": None})
 
     # Round robin: pick user with fewest total bookings
     remaining_ids = [u["id"] for u in available_users]
@@ -725,6 +741,25 @@ def round_robin():
     if avail_row:
         chosen["start_time"] = avail_row[0]
         chosen["end_time"] = avail_row[1]
+
+    # For onboarding bookings, return the chosen user's already-booked hours so the
+    # frontend can disable those slots (1-hour granularity).
+    booked_hours = []
+    if booking_type == "onboarding":
+        cur3 = db.cursor()
+        cur3.execute("""
+            SELECT start_datetime FROM bookings
+            WHERE user_id = %s AND start_datetime >= %s AND start_datetime < %s
+              AND status != 'cancelled' AND booking_type = 'onboarding'
+        """, (chosen["id"], date_str, next_date))
+        for row in cur3.fetchall():
+            try:
+                sdt = row[0] if isinstance(row[0], datetime) else datetime.fromisoformat(str(row[0]))
+                booked_hours.append(sdt.hour)
+            except Exception:
+                pass
+        cur3.close()
+    chosen["booked_hours"] = booked_hours
 
     return jsonify({"user": chosen})
 
@@ -847,16 +882,19 @@ def create_booking():
             # Onboarding  -> on_boarding_call (deal datetime ms) + on_boarding_call (company datetime ms).
             try:
                 dt = datetime.fromisoformat(data["start_datetime"])
-                date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
                 if data.get("booking_type") == "onboarding":
+                    # Onboarding: use actual call start time, interpreted as Pacific Time.
+                    call_ms = str(local_dt_to_ms(dt))
                     hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
-                        "properties": {"on_boarding_call": date_ms}
+                        "properties": {"on_boarding_call": call_ms}
                     })
                     if data.get("hubspot_company_id"):
                         hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
-                            "properties": {"on_boarding_call": date_ms}
+                            "properties": {"on_boarding_call": call_ms}
                         })
                 else:
+                    # Deployment: install_date_new is a date — midnight UTC of the day.
+                    date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
                     install_date_str = dt.strftime("%Y-%m-%d")
                     hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
                         "properties": {"install_date_new": date_ms}
