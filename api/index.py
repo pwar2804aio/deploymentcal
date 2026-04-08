@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.10.3"
+VERSION = "2.10.4"
 
 app = Flask(__name__)
 
@@ -829,19 +829,29 @@ def create_booking():
                     }],
                 })
 
-            # Update Install Date on deal and company
+            # Update HubSpot date properties on deal and company.
+            # Deployment -> install_date_new (deal datetime ms) + migrated_00npw00000fv4pz2ad (company date string).
+            # Onboarding  -> on_boarding_call (deal datetime ms) + on_boarding_call (company datetime ms).
             try:
                 dt = datetime.fromisoformat(data["start_datetime"])
-                install_date_str = dt.strftime("%Y-%m-%d")
-                # Deal property is datetime type - needs midnight UTC timestamp in ms
-                install_date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
-                hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
-                    "properties": {"install_date_new": install_date_ms}
-                })
-                if data.get("hubspot_company_id"):
-                    hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
-                        "properties": {"migrated_00npw00000fv4pz2ad": install_date_str}
+                date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
+                if data.get("booking_type") == "onboarding":
+                    hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                        "properties": {"on_boarding_call": date_ms}
                     })
+                    if data.get("hubspot_company_id"):
+                        hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
+                            "properties": {"on_boarding_call": date_ms}
+                        })
+                else:
+                    install_date_str = dt.strftime("%Y-%m-%d")
+                    hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                        "properties": {"install_date_new": date_ms}
+                    })
+                    if data.get("hubspot_company_id"):
+                        hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
+                            "properties": {"migrated_00npw00000fv4pz2ad": install_date_str}
+                        })
             except Exception:
                 pass  # Don't fail booking if date update fails
 
@@ -886,16 +896,19 @@ def update_booking(bid):
 
     result = {"ok": True}
 
-    # Clear Install Date on cancellation
+    # Clear the appropriate HubSpot date property on cancellation
     if data.get("status") == "cancelled" and HUBSPOT_API_KEY:
         try:
+            is_onboarding = data.get("booking_type") == "onboarding"
+            deal_prop = "on_boarding_call" if is_onboarding else "install_date_new"
+            company_prop = "on_boarding_call" if is_onboarding else "migrated_00npw00000fv4pz2ad"
             if data.get("hubspot_deal_id"):
                 hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
-                    "properties": {"install_date_new": ""}
+                    "properties": {deal_prop: ""}
                 })
             if data.get("hubspot_company_id"):
                 hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
-                    "properties": {"migrated_00npw00000fv4pz2ad": ""}
+                    "properties": {company_prop: ""}
                 })
         except Exception:
             pass
