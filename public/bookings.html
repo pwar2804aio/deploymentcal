@@ -270,13 +270,13 @@
 
                 <!-- Workflow action group (changes by booking type + status) -->
                 <div id="workflowGroup" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                    <!-- Onboarding: Stage 1 — Pre-Call Form -->
-                    <button class="btn btn-primary btn-sm" id="sendCustomerLinkBtn" onclick="sendCustomerLink()" style="display:none;">📧 Send Pre-Call Form to Customer</button>
+                    <!-- Onboarding: Stage 1 — Onboarding Form -->
+                    <button class="btn btn-primary btn-sm" id="sendCustomerLinkBtn" onclick="sendCustomerLink()" style="display:none;">📧 Send Onboarding Form</button>
                     <button class="btn btn-ghost btn-sm" id="copyCustomerLinkBtn" onclick="copyCustomerLink()" style="display:none;">🔗 Copy Link</button>
-                    <button class="btn btn-success btn-sm" id="completePrecallBtn" onclick="openOnboardingFormForStaff()" style="display:none;">✓ Complete Pre-Call Form</button>
+                    <button class="btn btn-success btn-sm" id="completePrecallBtn" onclick="openOnboardingFormForStaff()" style="display:none;">📂 Open Onboarding Form</button>
 
                     <!-- Onboarding: Stage 2 — Sign Off -->
-                    <button class="btn btn-success btn-sm" id="signoffBtn" onclick="openSignoffForm()" style="display:none;">✍️ Complete Sign Off Form</button>
+                    <button class="btn btn-success btn-sm" id="signoffBtn" onclick="openSignoffForm()" style="display:none;">✍️ Complete Onboarding Sign Off Form</button>
 
                     <!-- Deployment: Complete -->
                     <button class="btn btn-success btn-sm" id="completeBtn" onclick="openCompleteForm()" style="display:none;">✓ Complete Deployment</button>
@@ -876,12 +876,12 @@
                     document.getElementById("sendCustomerLinkBtn").style.display = '';
                     document.getElementById("copyCustomerLinkBtn").style.display = '';
                     document.getElementById("completePrecallBtn").style.display = '';
-                    stageEl.innerHTML = '<strong style="color:var(--primary);">Stage 1 of 2 — Pre-Call Form.</strong> Send the form to the customer, copy the link, or complete it together.';
+                    stageEl.innerHTML = '<strong style="color:var(--primary);">Stage 1 of 2 — Onboarding Form.</strong> Send the form to the customer, copy the link, or open it to complete it together.';
                     stageEl.style.display = '';
                 } else if (status === 'prep_complete') {
                     // Stage 2: Sign Off
                     document.getElementById("signoffBtn").style.display = '';
-                    stageEl.innerHTML = '<strong style="color:#92400e;">Stage 2 of 2 — Sign Off Form.</strong> Complete this with the customer during/after the call.';
+                    stageEl.innerHTML = '<strong style="color:#92400e;">Stage 2 of 2 — Onboarding Sign Off Form.</strong> Complete this with the customer during/after the call.';
                     stageEl.style.display = '';
                 }
             } else {
