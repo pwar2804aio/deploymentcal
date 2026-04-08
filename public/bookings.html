@@ -264,16 +264,35 @@
                 <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
             <div class="modal-body" id="viewBody"></div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeModal()">Close</button>
-                <a class="btn btn-success btn-sm" id="viewIcsLink" href="#" target="_blank">Download .ics</a>
-                <button class="btn btn-primary btn-sm" onclick="sendInvite()">Send Invite</button>
-                <button class="btn btn-primary btn-sm" id="sendCustomerLinkBtn" onclick="sendCustomerLink()" style="display:none;">📧 Send Form to Customer</button>
-                <button class="btn btn-ghost btn-sm" id="copyCustomerLinkBtn" onclick="copyCustomerLink()" style="display:none;">🔗 Copy Form Link</button>
-                <button class="btn btn-success btn-sm" id="completeBtn" onclick="openCompleteForm()">✓ Complete</button>
-                <button class="btn btn-success btn-sm" id="signoffBtn" onclick="openSignoffForm()" style="display:none;">✍️ Sign Off &amp; Complete</button>
-                <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel Booking</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
+            <div class="modal-footer" style="flex-wrap:wrap;gap:8px;">
+                <!-- Stage indicator -->
+                <div id="stageIndicator" style="width:100%;font-size:12px;color:var(--text-muted);margin-bottom:4px;display:none;"></div>
+
+                <!-- Workflow action group (changes by booking type + status) -->
+                <div id="workflowGroup" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <!-- Onboarding: Stage 1 — Pre-Call Form -->
+                    <button class="btn btn-primary btn-sm" id="sendCustomerLinkBtn" onclick="sendCustomerLink()" style="display:none;">📧 Send Pre-Call Form to Customer</button>
+                    <button class="btn btn-ghost btn-sm" id="copyCustomerLinkBtn" onclick="copyCustomerLink()" style="display:none;">🔗 Copy Link</button>
+                    <button class="btn btn-success btn-sm" id="completePrecallBtn" onclick="openOnboardingFormForStaff()" style="display:none;">✓ Complete Pre-Call Form</button>
+
+                    <!-- Onboarding: Stage 2 — Sign Off -->
+                    <button class="btn btn-success btn-sm" id="signoffBtn" onclick="openSignoffForm()" style="display:none;">✍️ Complete Sign Off Form</button>
+
+                    <!-- Deployment: Complete -->
+                    <button class="btn btn-success btn-sm" id="completeBtn" onclick="openCompleteForm()" style="display:none;">✓ Complete Deployment</button>
+                </div>
+
+                <!-- Spacer pushes admin buttons to the right -->
+                <div style="flex:1;"></div>
+
+                <!-- Calendar / admin actions -->
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <a class="btn btn-ghost btn-sm" id="viewIcsLink" href="#" target="_blank">📅 .ics</a>
+                    <button class="btn btn-ghost btn-sm" onclick="sendInvite()">📧 Send Invite</button>
+                    <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
+                    <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -753,8 +772,8 @@
                 var dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
                 var timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 var typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
-                var statusLabel = b.status === 'completed' ? 'deployed'
-                    : b.status === 'prep_complete' ? 'pre-call done'
+                var statusLabel = b.status === 'completed' ? (b.booking_type === 'onboarding' ? 'OB complete' : 'deployed')
+                    : b.status === 'prep_complete' ? 'awaiting sign off'
                     : (b.status || 'confirmed');
                 return '<tr style="cursor:pointer;" onclick="viewBooking(\'' + b.id + '\')">' +
                     '<td>' + dateStr + '</td>' +
@@ -824,21 +843,53 @@
             const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
             document.getElementById("viewTitle").textContent = b.title;
             document.getElementById("viewIcsLink").href = `/api/bookings/${b.id}/ics`;
-            const statusClass = b.status === 'cancelled' ? 'badge-cancelled'
-                : b.status === 'completed' ? 'badge-completed'
-                : b.status === 'prep_complete' ? 'badge-prep_complete'
-                : 'badge-confirmed';
-            const statusLabel = b.status === 'prep_complete' ? 'pre-call form complete' : (b.status || 'confirmed');
-            document.getElementById("cancelBtn").style.display = (b.status === 'cancelled' || b.status === 'completed') ? 'none' : '';
-            // Complete button: only deployment bookings in confirmed state
             const isOnboarding = (b.booking_type === 'onboarding');
-            document.getElementById("completeBtn").style.display = (!isOnboarding && b.status === 'confirmed') ? '' : 'none';
-            // Sign off button: onboarding bookings that are prep_complete (or confirmed - allow Buddy to skip pre-call form)
-            document.getElementById("signoffBtn").style.display = (isOnboarding && (b.status === 'prep_complete' || b.status === 'confirmed')) ? '' : 'none';
-            // Customer-link buttons: only onboarding + still in confirmed state (pre-call form not yet submitted)
-            const showCustomerBtns = isOnboarding && b.status === 'confirmed';
-            document.getElementById("sendCustomerLinkBtn").style.display = showCustomerBtns ? '' : 'none';
-            document.getElementById("copyCustomerLinkBtn").style.display = showCustomerBtns ? '' : 'none';
+            const status = b.status || 'confirmed';
+            const statusClass = status === 'cancelled' ? 'badge-cancelled'
+                : status === 'completed' ? 'badge-completed'
+                : status === 'prep_complete' ? 'badge-prep_complete'
+                : 'badge-confirmed';
+            // Friendly status labels
+            let statusLabel = status;
+            if (isOnboarding) {
+                if (status === 'confirmed') statusLabel = 'Stage 1: Pre-Call Form';
+                else if (status === 'prep_complete') statusLabel = 'Stage 2: Awaiting Sign Off';
+                else if (status === 'completed') statusLabel = 'Onboarding Complete';
+            } else {
+                if (status === 'completed') statusLabel = 'Deployed';
+            }
+
+            // Hide all workflow buttons first, then show what's needed
+            ['sendCustomerLinkBtn','copyCustomerLinkBtn','completePrecallBtn','signoffBtn','completeBtn'].forEach(id => {
+                document.getElementById(id).style.display = 'none';
+            });
+
+            // Stage indicator hint above the buttons
+            const stageEl = document.getElementById("stageIndicator");
+            stageEl.style.display = 'none';
+            stageEl.innerHTML = '';
+
+            if (isOnboarding) {
+                if (status === 'confirmed') {
+                    // Stage 1: Pre-Call Form
+                    document.getElementById("sendCustomerLinkBtn").style.display = '';
+                    document.getElementById("copyCustomerLinkBtn").style.display = '';
+                    document.getElementById("completePrecallBtn").style.display = '';
+                    stageEl.innerHTML = '<strong style="color:var(--primary);">Stage 1 of 2 — Pre-Call Form.</strong> Send the form to the customer, copy the link, or complete it together.';
+                    stageEl.style.display = '';
+                } else if (status === 'prep_complete') {
+                    // Stage 2: Sign Off
+                    document.getElementById("signoffBtn").style.display = '';
+                    stageEl.innerHTML = '<strong style="color:#92400e;">Stage 2 of 2 — Sign Off Form.</strong> Complete this with the customer during/after the call.';
+                    stageEl.style.display = '';
+                }
+            } else {
+                if (status === 'confirmed') {
+                    document.getElementById("completeBtn").style.display = '';
+                }
+            }
+
+            document.getElementById("cancelBtn").style.display = (status === 'cancelled' || status === 'completed') ? 'none' : '';
             document.getElementById("viewBody").innerHTML = `
                 <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${statusLabel}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>

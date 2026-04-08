@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.11.1"
+VERSION = "2.11.2"
 
 
 def local_dt_to_ms(dt_naive):
