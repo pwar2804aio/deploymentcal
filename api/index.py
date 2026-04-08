@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.10.2"
+VERSION = "2.10.3"
 
 app = Flask(__name__)
 
@@ -1380,10 +1380,13 @@ def build_booking_html(booking_data, specialist_name, cancelled=False):
     formatted_date, start_time = format_booking_date(booking_data)
     status = "CANCELLED" if cancelled else "Confirmed"
     status_color = "#dc2626" if cancelled else "#16a34a"
+    is_onboarding = booking_data.get("booking_type") == "onboarding"
+    type_label = "Onboarding Call" if is_onboarding else "Deployment"
+    assignee_label = "AIO Buddy" if is_onboarding else "Deployment Specialist"
     return f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
         <div style="background: {'#fef2f2' if cancelled else '#f0fdf4'}; border-left: 4px solid {status_color}; padding: 16px; margin-bottom: 20px;">
-            <h2 style="margin: 0; color: {status_color};">Deployment {status}</h2>
+            <h2 style="margin: 0; color: {status_color};">{type_label} {status}</h2>
         </div>
         <table style="width: 100%; border-collapse: collapse;">
             <tr><td style="padding: 8px; font-weight: bold; width: 140px;">Title:</td><td style="padding: 8px;">{booking_data.get('title', 'N/A')}</td></tr>
@@ -1391,7 +1394,7 @@ def build_booking_html(booking_data, specialist_name, cancelled=False):
             <tr><td style="padding: 8px; font-weight: bold;">Start Time:</td><td style="padding: 8px;">{start_time}</td></tr>
             <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Company:</td><td style="padding: 8px;">{booking_data.get('company_name', 'N/A')}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Deal Stage:</td><td style="padding: 8px;">{booking_data.get('deal_stage', 'N/A')}</td></tr>
-            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Deployment Specialist:</td><td style="padding: 8px;">{specialist_name}</td></tr>
+            <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">{assignee_label}:</td><td style="padding: 8px;">{specialist_name}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Contact:</td><td style="padding: 8px;">{booking_data.get('contact_name', 'N/A')}</td></tr>
             <tr style="background: #f9fafb;"><td style="padding: 8px; font-weight: bold;">Contact Email:</td><td style="padding: 8px;">{booking_data.get('contact_email', 'N/A')}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Contact Phone:</td><td style="padding: 8px;">{booking_data.get('contact_phone', 'N/A')}</td></tr>
@@ -1420,7 +1423,8 @@ def send_booking_email(booking_id, booking_data, db, cancelled=False):
             specialist = row["name"]
 
     html_body, formatted_date, status = build_booking_html(booking_data, specialist, cancelled)
-    subject = f"Deployment {status}: {booking_data.get('title', '')} - {formatted_date} ({specialist})"
+    type_label = "Onboarding Call" if booking_data.get("booking_type") == "onboarding" else "Deployment"
+    subject = f"{type_label} {status}: {booking_data.get('title', '')} - {formatted_date} ({specialist})"
 
     # Build SendGrid personalizations (one per recipient)
     personalizations = [{"to": [{"email": r}]} for r in recipients]
