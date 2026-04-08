@@ -14,7 +14,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.10.4"
+VERSION = "2.11.0"
 
 app = Flask(__name__)
 
@@ -152,6 +152,19 @@ def init_db(conn):
     cur.execute("""
         DO $$ BEGIN
             ALTER TABLE bookings ADD COLUMN form_responses TEXT;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
+    # Stage 3: AIO Buddy + customer sign-off form responses
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE bookings ADD COLUMN signoff_responses TEXT;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+    """)
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE bookings ADD COLUMN signoff_submitted_at TIMESTAMP;
         EXCEPTION WHEN duplicate_column THEN NULL;
         END $$;
     """)
@@ -1217,10 +1230,10 @@ def public_onboarding_submit(token):
         cur.close()
         return jsonify({"error": "This form has already been submitted"}), 400
 
-    # Save responses + mark complete
+    # Save responses + advance to prep_complete (NOT completed - call still has to happen)
     cur.execute("""
         UPDATE bookings
-        SET form_responses = %s, customer_form_submitted_at = NOW(), status = 'completed'
+        SET form_responses = %s, customer_form_submitted_at = NOW(), status = 'prep_complete'
         WHERE id = %s
     """, (json.dumps(data), booking["id"]))
     db.commit()
@@ -1229,7 +1242,7 @@ def public_onboarding_submit(token):
     bid = booking["id"]
     result = {"ok": True}
 
-    # Push to HubSpot — note on deal + company, mark deployment stage as deployed
+    # Push to HubSpot — pre-call note on deal + company. Don't touch deployment stage yet.
     if HUBSPOT_API_KEY and booking.get("hubspot_deal_id"):
         try:
             note_html = build_onboarding_note_html(booking, data)
@@ -1249,40 +1262,29 @@ def public_onboarding_submit(token):
                 },
                 "associations": note_associations,
             })
-            if booking.get("hubspot_company_id"):
-                hubspot_request("PATCH", f"/crm/v3/objects/companies/{booking['hubspot_company_id']}", {
-                    "properties": {"migrated_00nfi000003lzy1uac": "Active"}
-                })
             result["hubspot_note"] = "sent"
         except Exception as e:
             result["hubspot_note"] = f"error: {str(e)}"
 
-    # Notify AIO Buddy + booker via email
-    if SENDGRID_API_KEY:
+    # Notify AIO Buddy only (per workflow design)
+    if SENDGRID_API_KEY and booking.get("user_id"):
         try:
-            recipients = []
-            if booking.get("user_id"):
-                cur2 = db.cursor()
-                cur2.execute("SELECT email FROM users WHERE id = %s", (booking["user_id"],))
-                u = dict_one(cur2)
-                cur2.close()
-                if u and u.get("email"):
-                    recipients.append(u["email"])
-            if ADMIN_EMAIL:
-                recipients.append(ADMIN_EMAIL)
-            recipients = list(dict.fromkeys([r for r in recipients if r]))
-            if recipients:
+            cur2 = db.cursor()
+            cur2.execute("SELECT email FROM users WHERE id = %s", (booking["user_id"],))
+            u = dict_one(cur2)
+            cur2.close()
+            if u and u.get("email"):
                 html = f"""
                 <div style="font-family:Arial,sans-serif;max-width:600px;">
-                    <h2 style="color:#16a34a;">✅ Onboarding Form Submitted</h2>
-                    <p>The customer has completed their onboarding form for <strong>{booking.get('company_name','')}</strong>.</p>
-                    <p>Booking is now marked as complete.</p>
+                    <h2 style="color:#16a34a;">✅ Pre-Call Form Submitted</h2>
+                    <p>The customer has completed their onboarding pre-call form for <strong>{booking.get('company_name','')}</strong>.</p>
+                    <p>You can now proceed with the call. After the call, complete the Sign Off form on the booking to finalise.</p>
                 </div>
                 """
                 sg_payload = {
-                    "personalizations": [{"to": [{"email": r}]} for r in recipients],
+                    "personalizations": [{"to": [{"email": u["email"]}]}],
                     "from": {"email": EMAIL_FROM},
-                    "subject": f"Onboarding submitted: {booking.get('company_name','')}",
+                    "subject": f"Pre-call form submitted: {booking.get('company_name','')}",
                     "content": [{"type": "text/html", "value": html}],
                 }
                 requests.post(
@@ -1318,6 +1320,165 @@ def build_onboarding_note_html(booking, responses):
         <table style="width:100%;border-collapse:collapse;">{rows}</table>
     </div>
     """
+
+
+def build_signoff_note_html(booking, data, specialist_name):
+    """Build the HubSpot note for the Onboarding Approval & Sign Off form."""
+    def yn(val):
+        if val is True or val == "Yes": return "✅ Yes"
+        if val is False or val == "No": return "❌ No"
+        return val or "—"
+
+    def list_or_dash(val):
+        if isinstance(val, list) and val:
+            return ", ".join(str(v) for v in val)
+        return val or "—"
+
+    rows = [
+        ("Restaurant Name", data.get("restaurant_name") or booking.get("company_name", "")),
+        ("Owner's Name", data.get("owner_name") or booking.get("contact_name", "")),
+        ("Expert AIO Buddy", specialist_name),
+        ("Menu &amp; Pricing", yn(data.get("menu_pricing"))),
+        ("Adyen", yn(data.get("adyen"))),
+        ("Taxes &amp; Charges", yn(data.get("taxes_charges"))),
+        ("Discounts &amp; Comps", yn(data.get("discounts_comps"))),
+        ("Employee List", yn(data.get("employee_list"))),
+        ("MoM App Setup", yn(data.get("mom_app_setup"))),
+        ("3PO Setup &amp; Go Live", list_or_dash(data.get("third_party_setup"))),
+        ("Training", list_or_dash(data.get("training"))),
+        ("Install Date", data.get("install_date") or "—"),
+        ("Go-Live Date", data.get("go_live_date") or "—"),
+        ("Final Acknowledgment", data.get("acknowledgment") or "—"),
+    ]
+    rows_html = ""
+    for i, (label, val) in enumerate(rows):
+        bg = "#f9fafb" if i % 2 else "#ffffff"
+        rows_html += (
+            f'<tr style="background:{bg};">'
+            f'<td style="padding:8px 12px;font-weight:600;color:#6b7c93;width:220px;">{label}</td>'
+            f'<td style="padding:8px 12px;color:#1a1f36;">{val}</td>'
+            f'</tr>'
+        )
+    return f"""
+    <div style="font-family:Arial,sans-serif;max-width:680px;">
+        <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px;margin-bottom:20px;">
+            <h2 style="margin:0;color:#16a34a;">✅ Onboarding Call Completed — Sign Off</h2>
+            <p style="margin:8px 0 0;color:#6b7c93;">{booking.get('company_name','')}</p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">{rows_html}</table>
+    </div>
+    """
+
+
+@app.route("/api/bookings/<bid>/signoff", methods=["POST"])
+@require_auth
+def submit_signoff(bid):
+    """AIO Buddy submits the Onboarding Approval & Sign Off form after the call."""
+    data = request.json or {}
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bookings WHERE id = %s", (bid,))
+    booking = dict_one(cur)
+    if not booking:
+        cur.close()
+        return jsonify({"error": "Booking not found"}), 404
+
+    if booking.get("booking_type") != "onboarding":
+        cur.close()
+        return jsonify({"error": "Sign off only applies to onboarding calls"}), 400
+
+    if booking.get("status") not in ("prep_complete", "confirmed"):
+        cur.close()
+        return jsonify({"error": f"Cannot sign off a booking with status '{booking.get('status')}'"}), 400
+
+    if not data.get("acknowledgment"):
+        cur.close()
+        return jsonify({"error": "Final acknowledgment (signature) is required"}), 400
+
+    cur.execute("""
+        UPDATE bookings
+        SET signoff_responses = %s, signoff_submitted_at = NOW(), status = 'completed'
+        WHERE id = %s
+    """, (json.dumps(data), bid))
+    db.commit()
+    cur.close()
+
+    result = {"ok": True}
+
+    # Specialist info
+    specialist_name = "AIO Buddy"
+    user = None
+    if booking.get("user_id"):
+        cur2 = db.cursor()
+        cur2.execute("SELECT name, email, hubspot_owner_id FROM users WHERE id = %s", (booking["user_id"],))
+        user = dict_one(cur2)
+        cur2.close()
+        if user and user.get("name"):
+            specialist_name = user["name"]
+
+    # HubSpot — second note + mark company as Active (deployed)
+    if HUBSPOT_API_KEY and booking.get("hubspot_deal_id"):
+        try:
+            note_html = build_signoff_note_html(booking, data, specialist_name)
+            note_props = {
+                "hs_note_body": note_html,
+                "hs_timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+            if user and user.get("hubspot_owner_id"):
+                note_props["hubspot_owner_id"] = user["hubspot_owner_id"]
+            # Note on deal
+            hubspot_request("POST", "/crm/v3/objects/notes", {
+                "properties": note_props,
+                "associations": [{
+                    "to": {"id": int(booking["hubspot_deal_id"])},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}],
+                }],
+            })
+            # Note on company
+            if booking.get("hubspot_company_id"):
+                hubspot_request("POST", "/crm/v3/objects/notes", {
+                    "properties": note_props,
+                    "associations": [{
+                        "to": {"id": int(booking["hubspot_company_id"])},
+                        "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 190}],
+                    }],
+                })
+                # Mark company as Deployed (Active)
+                hubspot_request("PATCH", f"/crm/v3/objects/companies/{booking['hubspot_company_id']}", {
+                    "properties": {"migrated_00nfi000003lzy1uac": "Active"}
+                })
+            result["hubspot_note"] = "sent"
+        except Exception as e:
+            result["hubspot_note"] = f"error: {str(e)}"
+
+    # Notify AIO Buddy + booker + admin
+    if SENDGRID_API_KEY:
+        try:
+            recipients = get_booking_recipients(booking, db)
+            if recipients:
+                html = f"""
+                <div style="font-family:Arial,sans-serif;max-width:600px;">
+                    <h2 style="color:#16a34a;">✅ Onboarding Call Completed</h2>
+                    <p>The onboarding call sign off form has been completed for <strong>{booking.get('company_name','')}</strong>.</p>
+                    <p>The booking has been marked complete and the customer has been moved to Deployed in HubSpot.</p>
+                </div>
+                """
+                sg_payload = {
+                    "personalizations": [{"to": [{"email": e} for e in recipients]}],
+                    "from": {"email": EMAIL_FROM},
+                    "subject": f"Onboarding completed: {booking.get('company_name','')}",
+                    "content": [{"type": "text/html", "value": html}],
+                }
+                requests.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                    json=sg_payload,
+                )
+                result["email_sent"] = "sent"
+        except Exception as e:
+            result["email_sent"] = f"error: {str(e)}"
+
+    return jsonify(result)
 
 
 # ── Calendar ICS ──────────────────────────────────────────────────────────────

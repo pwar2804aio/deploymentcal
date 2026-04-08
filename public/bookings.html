@@ -84,6 +84,7 @@
         .badge-confirmed { background: #d1fae5; color: #065f46; }
         .badge-cancelled { background: #fee2e2; color: #991b1b; }
         .badge-completed { background: #d1fae5; color: #065f46; }
+        .badge-prep_complete { background: #fef3c7; color: #92400e; }
 
         .section-header-bar {
             display: flex;
@@ -270,6 +271,7 @@
                 <button class="btn btn-primary btn-sm" id="sendCustomerLinkBtn" onclick="sendCustomerLink()" style="display:none;">📧 Send Form to Customer</button>
                 <button class="btn btn-ghost btn-sm" id="copyCustomerLinkBtn" onclick="copyCustomerLink()" style="display:none;">🔗 Copy Form Link</button>
                 <button class="btn btn-success btn-sm" id="completeBtn" onclick="openCompleteForm()">✓ Complete</button>
+                <button class="btn btn-success btn-sm" id="signoffBtn" onclick="openSignoffForm()" style="display:none;">✍️ Sign Off &amp; Complete</button>
                 <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel Booking</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
             </div>
@@ -556,6 +558,119 @@
         </div>
     </div>
 
+    <!-- Onboarding Sign Off Modal -->
+    <div class="modal-overlay" id="signoffModal">
+        <div class="modal" style="width:680px;max-width:95vw;">
+            <div class="modal-header">
+                <h2>Onboarding Approval &amp; Sign Off</h2>
+                <button class="modal-close" onclick="closeSignoffModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="complete-summary" id="signoffSummary"></div>
+                <form class="complete-form" id="signoffForm">
+                    <div class="form-row">
+                        <label>Restaurant Name</label>
+                        <input type="text" id="soRestaurant">
+                    </div>
+                    <div class="form-row">
+                        <label>Owner's Name</label>
+                        <input type="text" id="soOwner">
+                    </div>
+                    <div class="form-row">
+                        <label>Expert AIO Buddy</label>
+                        <input type="text" id="soBuddy" readonly style="background:#f3f4f6;">
+                    </div>
+
+                    <div class="form-section-title">Setup Sign Off</div>
+
+                    <div class="form-row">
+                        <label>Menu &amp; Pricing complete <span class="req">*</span></label>
+                        <select id="soMenu" required>
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Adyen complete <span class="req">*</span></label>
+                        <select id="soAdyen" required>
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Taxes &amp; Charges complete <span class="req">*</span></label>
+                        <select id="soTaxes" required>
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Discounts &amp; Comps complete <span class="req">*</span></label>
+                        <select id="soDiscounts" required>
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Employee List complete <span class="req">*</span></label>
+                        <select id="soEmployees" required>
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>MoM App Setup complete <span class="req">*</span></label>
+                        <select id="soMom" required>
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                    </div>
+
+                    <label style="font-size:13px;font-weight:600;color:var(--text-muted);margin:14px 0 6px;display:block;">3PO Setup &amp; Go Live <span style="font-weight:400;color:#9ca3af;">(optional)</span></label>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-row"><input type="checkbox" id="so_3po_doordash" value="DoorDash"><label for="so_3po_doordash">DoorDash</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="so_3po_ubereats" value="UberEats"><label for="so_3po_ubereats">UberEats</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="so_3po_grubhub" value="GrubHub"><label for="so_3po_grubhub">GrubHub</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="so_3po_na" value="Not Applicable"><label for="so_3po_na">Not Applicable</label></div>
+                    </div>
+
+                    <div class="form-section-title">Training</div>
+                    <label style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:block;">Training completed <span class="req">*</span></label>
+                    <div class="checkbox-grid">
+                        <div class="checkbox-row"><input type="checkbox" id="so_train_mom" value="MoM App"><label for="so_train_mom">MoM App</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="so_train_web" value="Web Dashboard"><label for="so_train_web">Web Dashboard</label></div>
+                        <div class="checkbox-row"><input type="checkbox" id="so_train_none" value="Not Completed"><label for="so_train_none">Not Completed</label></div>
+                    </div>
+
+                    <div class="form-section-title">Dates</div>
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Install Date <span class="req">*</span></label>
+                            <input type="date" id="soInstallDate" required>
+                        </div>
+                        <div class="form-row">
+                            <label>Go-Live Date <span class="req">*</span></label>
+                            <input type="date" id="soGoLiveDate" required>
+                        </div>
+                    </div>
+
+                    <div class="form-section-title">Final Acknowledgment</div>
+                    <div class="signoff-disclaimer">
+                        By typing your full name below, you confirm that the items above are accurate and the customer has been onboarded. This acts as your electronic signature.
+                    </div>
+                    <div class="form-row">
+                        <label>Type your full name <span class="req">*</span></label>
+                        <input type="text" id="soAck" required placeholder="Your full name">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeSignoffModal()">Cancel</button>
+                <button class="btn btn-success" onclick="submitSignoff()" id="submitSignoffBtn">Submit Sign Off</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let allBookings = [];
         let allUsers = [];
@@ -638,7 +753,9 @@
                 var dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
                 var timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 var typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
-                var statusLabel = b.status === 'completed' ? 'deployed' : (b.status || 'confirmed');
+                var statusLabel = b.status === 'completed' ? 'deployed'
+                    : b.status === 'prep_complete' ? 'pre-call done'
+                    : (b.status || 'confirmed');
                 return '<tr style="cursor:pointer;" onclick="viewBooking(\'' + b.id + '\')">' +
                     '<td>' + dateStr + '</td>' +
                     '<td>' + timeStr + '</td>' +
@@ -707,16 +824,23 @@
             const typeClass = b.booking_type === 'install' ? 'badge-install' : b.booking_type === 'training' ? 'badge-training' : 'badge-onboarding';
             document.getElementById("viewTitle").textContent = b.title;
             document.getElementById("viewIcsLink").href = `/api/bookings/${b.id}/ics`;
-            const statusClass = b.status === 'cancelled' ? 'badge-cancelled' : 'badge-confirmed';
+            const statusClass = b.status === 'cancelled' ? 'badge-cancelled'
+                : b.status === 'completed' ? 'badge-completed'
+                : b.status === 'prep_complete' ? 'badge-prep_complete'
+                : 'badge-confirmed';
+            const statusLabel = b.status === 'prep_complete' ? 'pre-call form complete' : (b.status || 'confirmed');
             document.getElementById("cancelBtn").style.display = (b.status === 'cancelled' || b.status === 'completed') ? 'none' : '';
-            document.getElementById("completeBtn").style.display = (b.status === 'confirmed') ? '' : 'none';
-            // Onboarding-only customer-link buttons
+            // Complete button: only deployment bookings in confirmed state
             const isOnboarding = (b.booking_type === 'onboarding');
+            document.getElementById("completeBtn").style.display = (!isOnboarding && b.status === 'confirmed') ? '' : 'none';
+            // Sign off button: onboarding bookings that are prep_complete (or confirmed - allow Buddy to skip pre-call form)
+            document.getElementById("signoffBtn").style.display = (isOnboarding && (b.status === 'prep_complete' || b.status === 'confirmed')) ? '' : 'none';
+            // Customer-link buttons: only onboarding + still in confirmed state (pre-call form not yet submitted)
             const showCustomerBtns = isOnboarding && b.status === 'confirmed';
             document.getElementById("sendCustomerLinkBtn").style.display = showCustomerBtns ? '' : 'none';
             document.getElementById("copyCustomerLinkBtn").style.display = showCustomerBtns ? '' : 'none';
             document.getElementById("viewBody").innerHTML = `
-                <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${b.status || 'confirmed'}</span></div></div>
+                <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${statusLabel}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
                 <div class="field"><div class="field-label">Assigned To</div><div class="field-value" style="display:flex;align-items:center;gap:8px;">
                     <select id="reassignSelect" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;">
@@ -1037,6 +1161,89 @@
 
         function closeCompleteModal() {
             document.getElementById("completeModal").classList.remove("open");
+        }
+
+        function openSignoffForm() {
+            if (!currentBooking) return;
+            const b = currentBooking;
+            const start = new Date(b.start_datetime);
+            document.getElementById("signoffSummary").innerHTML =
+                '<strong>' + (b.company_name || b.title) + '</strong><br>' +
+                start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
+                ' | ' + (b.user_name || 'Unassigned');
+            // Pre-fill
+            document.getElementById("soRestaurant").value = b.company_name || '';
+            document.getElementById("soOwner").value = b.contact_name || '';
+            document.getElementById("soBuddy").value = b.user_name || '';
+            // Reset
+            ['soMenu','soAdyen','soTaxes','soDiscounts','soEmployees','soMom'].forEach(id => document.getElementById(id).value = '');
+            document.querySelectorAll('input[id^="so_3po_"], input[id^="so_train_"]').forEach(cb => cb.checked = false);
+            document.getElementById("soInstallDate").value = '';
+            document.getElementById("soGoLiveDate").value = '';
+            document.getElementById("soAck").value = '';
+            document.getElementById("viewModal").classList.remove("open");
+            document.getElementById("signoffModal").classList.add("open");
+        }
+
+        function closeSignoffModal() {
+            document.getElementById("signoffModal").classList.remove("open");
+        }
+
+        async function submitSignoff() {
+            if (!currentBooking) return;
+            const required = {
+                menu_pricing: document.getElementById("soMenu").value,
+                adyen: document.getElementById("soAdyen").value,
+                taxes_charges: document.getElementById("soTaxes").value,
+                discounts_comps: document.getElementById("soDiscounts").value,
+                employee_list: document.getElementById("soEmployees").value,
+                mom_app_setup: document.getElementById("soMom").value,
+            };
+            for (const k in required) {
+                if (!required[k]) { alert("Please complete all required Setup Sign Off fields."); return; }
+            }
+            const training = Array.from(document.querySelectorAll('input[id^="so_train_"]:checked')).map(cb => cb.value);
+            if (!training.length) { alert("Please select at least one training option."); return; }
+            const installDate = document.getElementById("soInstallDate").value;
+            const goLiveDate = document.getElementById("soGoLiveDate").value;
+            const ack = document.getElementById("soAck").value.trim();
+            if (!installDate) { alert("Please select an install date."); return; }
+            if (!goLiveDate) { alert("Please select a go-live date."); return; }
+            if (!ack) { alert("Please type your full name as final acknowledgment."); return; }
+
+            const payload = Object.assign({}, required, {
+                restaurant_name: document.getElementById("soRestaurant").value,
+                owner_name: document.getElementById("soOwner").value,
+                third_party_setup: Array.from(document.querySelectorAll('input[id^="so_3po_"]:checked')).map(cb => cb.value),
+                training: training,
+                install_date: installDate,
+                go_live_date: goLiveDate,
+                acknowledgment: ack,
+            });
+
+            const btn = document.getElementById("submitSignoffBtn");
+            btn.disabled = true;
+            btn.textContent = "Submitting...";
+            try {
+                const res = await fetch('/api/bookings/' + currentBooking.id + '/signoff', {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                let data = {};
+                try { data = await res.json(); } catch(_) {}
+                if (res.ok) {
+                    closeSignoffModal();
+                    loadBookings();
+                    alert("Onboarding sign off submitted!");
+                } else {
+                    alert("Failed (" + res.status + "): " + (data.error || res.statusText || "Unknown error"));
+                }
+            } catch (e) {
+                alert("Network error: " + e.message);
+            }
+            btn.disabled = false;
+            btn.textContent = "Submit Sign Off";
         }
 
         async function readFileAsDataURL(file) {
