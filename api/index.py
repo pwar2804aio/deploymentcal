@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.11.2"
+VERSION = "2.11.3"
 
 
 def local_dt_to_ms(dt_naive):
@@ -1406,6 +1406,27 @@ def build_signoff_note_html(booking, data, specialist_name):
         <table style="width:100%;border-collapse:collapse;">{rows_html}</table>
     </div>
     """
+
+
+@app.route("/api/bookings/<bid>/reset-stage", methods=["POST"])
+@require_auth
+def reset_booking_stage(bid):
+    """Admin: revert an onboarding booking back to Stage 1 (confirmed) and
+    clear any pre-call form / sign-off data so it can be redone."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        UPDATE bookings
+        SET status = 'confirmed',
+            form_responses = NULL,
+            customer_form_submitted_at = NULL,
+            signoff_responses = NULL,
+            signoff_submitted_at = NULL
+        WHERE id = %s
+    """, (bid,))
+    db.commit()
+    cur.close()
+    return jsonify({"ok": True, "status": "confirmed"})
 
 
 @app.route("/api/bookings/<bid>/signoff", methods=["POST"])

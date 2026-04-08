@@ -289,6 +289,7 @@
                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                     <a class="btn btn-ghost btn-sm" id="viewIcsLink" href="#" target="_blank">📅 .ics</a>
                     <button class="btn btn-ghost btn-sm" onclick="sendInvite()">📧 Send Invite</button>
+                    <button class="btn btn-ghost btn-sm" id="resetStageBtn" onclick="resetStage()" style="display:none;">↩ Reset to Stage 1</button>
                     <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelBooking()">Cancel</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteBooking()">Delete</button>
                     <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
@@ -890,6 +891,8 @@
             }
 
             document.getElementById("cancelBtn").style.display = (status === 'cancelled' || status === 'completed') ? 'none' : '';
+            // Reset to Stage 1 — only for onboarding bookings past stage 1
+            document.getElementById("resetStageBtn").style.display = (isOnboarding && (status === 'prep_complete' || status === 'completed')) ? '' : 'none';
             document.getElementById("viewBody").innerHTML = `
                 <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge ${statusClass}">${statusLabel}</span></div></div>
                 <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${start.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} | Start: ${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>
@@ -1039,6 +1042,20 @@
                 alert("Form link copied to clipboard:\n" + link.url);
             } catch (e) {
                 prompt("Copy this link:", link.url);
+            }
+        }
+
+        async function resetStage() {
+            if (!currentBooking) return;
+            if (!confirm("Reset this booking back to Stage 1? This will clear any submitted pre-call form and sign-off data.")) return;
+            const res = await fetch('/api/bookings/' + currentBooking.id + '/reset-stage', { method: 'POST' });
+            const d = await res.json();
+            if (res.ok) {
+                alert("Booking reset to Stage 1.");
+                closeModal();
+                loadBookings();
+            } else {
+                alert("Failed: " + (d.error || res.status));
             }
         }
 
