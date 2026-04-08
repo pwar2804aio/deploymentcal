@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.11.4"
+VERSION = "2.11.5"
 
 
 def local_dt_to_ms(dt_naive):
@@ -1267,6 +1267,12 @@ def public_onboarding_submit(token):
     if booking.get("customer_form_submitted_at"):
         cur.close()
         return jsonify({"error": "This form has already been submitted"}), 400
+
+    # If the customer overrode the restaurant name on the form, update the booking
+    new_name = (data.get("restaurant_name") or "").strip()
+    if new_name and new_name != (booking.get("company_name") or ""):
+        cur.execute("UPDATE bookings SET company_name = %s WHERE id = %s", (new_name, booking["id"]))
+        booking["company_name"] = new_name
 
     # Save responses + advance to prep_complete (NOT completed - call still has to happen)
     cur.execute("""

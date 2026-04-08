@@ -83,6 +83,14 @@
 
             <form id="onboardingForm" onsubmit="event.preventDefault(); submitForm();">
                 <div class="section">
+                    <h2>Restaurant Details</h2>
+                    <div class="field">
+                        <label>Restaurant Name<span class="required-mark">*</span></label>
+                        <input type="text" id="restaurant_name" required placeholder="Restaurant name">
+                    </div>
+                </div>
+
+                <div class="section">
                     <h2>Required Modules</h2>
 
                     <div class="field">
@@ -207,6 +215,9 @@
                 "<strong>" + (booking.company_name || "Your booking") + "</strong><br>" +
                 "Onboarding call on <strong>" + dateStr + " at " + timeStr + "</strong>";
 
+            // Pre-fill the editable restaurant name from the booking
+            document.getElementById("restaurant_name").value = booking.company_name || "";
+
             document.getElementById("loadingState").classList.add("hidden");
             document.getElementById("formState").classList.remove("hidden");
         }
@@ -224,6 +235,8 @@
             const btn = document.getElementById("submitBtn");
 
             // Required-field validation (matches the form's * marks)
+            const restaurantName = document.getElementById("restaurant_name").value.trim();
+            if (!restaurantName) { alert("Please enter the Restaurant Name."); return; }
             const thirdParty = getCheckedValues("third_party");
             const thirdPartyOther = document.getElementById("thirdPartyOtherCheck").checked
                 ? document.getElementById("thirdPartyOtherText").value.trim() : "";
@@ -247,6 +260,7 @@
             if (thirdPartyOther) thirdParty.push("Other: " + thirdPartyOther);
 
             const payload = {
+                restaurant_name: restaurantName,
                 order_pay: getCheckedValues("order_pay"),
                 third_party_integrations: thirdParty,
                 marketing: marketing,
