@@ -551,9 +551,10 @@
             const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
             const today = new Date();
             today.setHours(0,0,0,0);
-            // Minimum 24 hours: earliest bookable date is day after tomorrow
+            // Lead time: deployments need 48h, onboarding calls need 24h
+            const leadDays = currentBookingType() === "onboarding" ? 1 : 2;
             const minDate = new Date(today);
-            minDate.setDate(minDate.getDate() + 2);
+            minDate.setDate(minDate.getDate() + leadDays);
 
             // Previous month padding
             const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
