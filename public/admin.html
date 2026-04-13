@@ -97,7 +97,7 @@
         tr:last-child td { border-bottom: none; }
 
         .color-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: middle; }
-        .role-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #ede9fe; color: #5b21b6; }
+        .role-badge { display: inline-block; padding: 2px 8px; border-radius: 10x; font-size: 11px; font-weight: 600; background: #ede9fe; color: #5b21b6; }
 
         /* Availability Grid */
         .avail-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
@@ -352,6 +352,7 @@
                         <option value="deployment_specialist">Deployment Specialist</option>
                         <option value="manager">Manager</option>
                         <option value="aio_buddy">AIO Buddy</option>
+                        <option value="sales_rep">Sales Rep</option>
                     </select>
                 </div>
                 <div class="form-row">
@@ -434,7 +435,7 @@
         }
 
         function formatRole(role) {
-            const map = { deployment_specialist: 'Deployment Specialist', manager: 'Manager', aio_buddy: 'AIO Buddy', installer: 'Installer', trainer: 'Trainer', lead: 'Lead' };
+            const map = { deployment_specialist: 'Deployment Specialist', manager: 'Manager', aio_buddy: 'AIO Buddy', sales_rep: 'Sales Rep', installer: 'Installer', trainer: 'Trainer', lead: 'Lead' };
             return map[role] || role;
         }
 
