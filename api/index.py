@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.12.4"
+VERSION = "2.12.5"
 
 
 def local_dt_to_ms(dt_naive):
@@ -381,8 +381,15 @@ def hubspot_request(method, endpoint, data=None):
         "Content-Type": "application/json",
     }
     resp = requests.request(method, url, headers=headers, json=data, timeout=15)
-    resp.raise_for_status()
-    return resp.json()
+    if not resp.ok:
+        # Surface HubSpot's response body so 400s aren't silently truncated
+        body = ""
+        try:
+            body = resp.text[:500]
+        except Exception:
+            pass
+        raise requests.exceptions.HTTPError(f"{resp.status_code} {resp.reason} — {body}", response=resp)
+    return resp.json() if resp.text else {}
 
 
 @app.route("/api/hubspot/deals")
