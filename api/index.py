@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.12.0"
+VERSION = "2.12.1"
 
 
 def local_dt_to_ms(dt_naive):
@@ -390,32 +390,37 @@ def hubspot_request(method, endpoint, data=None):
 def get_hubspot_deals():
     if not HUBSPOT_API_KEY:
         return jsonify({"error": "HubSpot API key not configured"}), 400
-    stage_ids = list(DEAL_STAGES.keys())
-    payload = {
-        "filterGroups": [{
-            "filters": [{
-                "propertyName": "dealstage",
-                "operator": "IN",
-                "values": stage_ids,
-            }]
-        }],
-        "properties": ["dealname", "dealstage", "pipeline", "amount", "hubspot_owner_id", "closedate"],
-        "limit": 100,
-    }
+    # Return ALL deals (across every pipeline/stage). Paginate up to ~1000 deals.
+    deals = []
+    after = None
+    pages = 0
+    MAX_PAGES = 5  # 5 * 200 = 1000 deals max
     try:
-        result = hubspot_request("POST", "/crm/v3/objects/deals/search", payload)
-        deals = []
-        for d in result.get("results", []):
-            props = d.get("properties", {})
-            stage_id = props.get("dealstage", "")
-            deals.append({
-                "id": d["id"],
-                "name": props.get("dealname", ""),
-                "stage": DEAL_STAGES.get(stage_id, stage_id),
-                "stageId": stage_id,
-                "amount": props.get("amount"),
-                "closeDate": props.get("closedate"),
-            })
+        while pages < MAX_PAGES:
+            payload = {
+                "properties": ["dealname", "dealstage", "pipeline", "amount", "hubspot_owner_id", "closedate"],
+                "limit": 200,
+                "sorts": [{"propertyName": "hs_lastmodifieddate", "direction": "DESCENDING"}],
+            }
+            if after:
+                payload["after"] = after
+            result = hubspot_request("POST", "/crm/v3/objects/deals/search", payload)
+            for d in result.get("results", []):
+                props = d.get("properties", {})
+                stage_id = props.get("dealstage", "")
+                deals.append({
+                    "id": d["id"],
+                    "name": props.get("dealname", ""),
+                    "stage": DEAL_STAGES.get(stage_id, stage_id or "—"),
+                    "stageId": stage_id,
+                    "amount": props.get("amount"),
+                    "closeDate": props.get("closedate"),
+                })
+            paging = result.get("paging", {}).get("next", {})
+            after = paging.get("after")
+            pages += 1
+            if not after:
+                break
         return jsonify(deals)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
