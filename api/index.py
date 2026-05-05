@@ -633,8 +633,46 @@ def _roles_for_booking_type(booking_type):
     """Map booking type to allowed user roles."""
     if booking_type == "onboarding":
         return ["aio_buddy"]
+    if booking_type == "demo_setup":
+        return ["demo"]
     # Default = deployment
     return ["deployment_specialist", "installer", "trainer", "lead"]
+
+
+DEMO_USER_EMAIL = "waleed.sulehri@aioapp.com"
+
+
+def _get_or_create_demo_user(db):
+    """Find or create the dedicated Demo Setup user (Waleed). Always returns a row."""
+    cur = db.cursor()
+    cur.execute("SELECT id, name, email, role, color FROM users WHERE LOWER(email) = LOWER(%s)", (DEMO_USER_EMAIL,))
+    row = dict_one(cur)
+    if row:
+        cur.close()
+        # Make sure role is 'demo' so role-based filters keep him isolated
+        if row.get("role") != "demo":
+            cur2 = db.cursor()
+            cur2.execute("UPDATE users SET role = 'demo', active = 1 WHERE id = %s", (row["id"],))
+            db.commit()
+            cur2.close()
+            row["role"] = "demo"
+        return row
+
+    # Create the user with full-week availability 09:00-17:00 PT
+    new_id = str(uuid.uuid4())
+    cur.execute("""
+        INSERT INTO users (id, name, email, role, color, active, password_hash)
+        VALUES (%s, %s, %s, 'demo', '#f59e0b', 1, '')
+    """, (new_id, "Waleed Sulehri", DEMO_USER_EMAIL))
+    # Mon..Fri availability
+    for dow in range(0, 5):
+        cur.execute("""
+            INSERT INTO availability (user_id, day_of_week, start_time, end_time)
+            VALUES (%s, %s, '09:00', '17:00')
+        """, (new_id, dow))
+    db.commit()
+    cur.close()
+    return {"id": new_id, "name": "Waleed Sulehri", "email": DEMO_USER_EMAIL, "role": "demo", "color": "#f59e0b"}
 
 
 @app.route("/api/available-days")
@@ -642,8 +680,11 @@ def _roles_for_booking_type(booking_type):
 def available_days():
     """Return which days of week (0=Mon..6=Sun) have at least one available user."""
     booking_type = request.args.get("booking_type", "install")
-    roles = _roles_for_booking_type(booking_type)
     db = get_db()
+    # Make sure the demo user exists when demo_setup is requested
+    if booking_type == "demo_setup":
+        _get_or_create_demo_user(db)
+    roles = _roles_for_booking_type(booking_type)
     cur = db.cursor()
     placeholders = ",".join(["%s"] * len(roles))
     cur.execute(f"""
@@ -668,9 +709,12 @@ def round_robin():
 
     target_date = datetime.strptime(date_str, "%Y-%m-%d")
     dow = target_date.weekday()  # Mon=0..Sun=6
-    roles = _roles_for_booking_type(booking_type)
 
     db = get_db()
+    # Make sure demo user exists for demo_setup bookings
+    if booking_type == "demo_setup":
+        _get_or_create_demo_user(db)
+    roles = _roles_for_booking_type(booking_type)
     cur = db.cursor()
 
     # Get active users who have availability on this day of week and a matching role
@@ -699,9 +743,9 @@ def round_robin():
         cur.close()
         return jsonify({"user": None})
 
-    # Deployments block the whole day; onboarding calls only block their own 1-hour slot.
+    # Deployments block the whole day; onboarding & demo setup only block their own 1-hour slot.
     next_date = (target_date + timedelta(days=1)).strftime("%Y-%m-%d")
-    if booking_type != "onboarding":
+    if booking_type not in ("onboarding", "demo_setup"):
         cur.execute("""
             SELECT DISTINCT user_id FROM bookings
             WHERE start_datetime >= %s AND start_datetime < %s
@@ -742,16 +786,16 @@ def round_robin():
         chosen["start_time"] = avail_row[0]
         chosen["end_time"] = avail_row[1]
 
-    # For onboarding bookings, return the chosen user's already-booked hours so the
-    # frontend can disable those slots (1-hour granularity).
+    # For 1-hour slot bookings (onboarding, demo_setup), return the chosen user's
+    # already-booked hours so the frontend can disable those slots.
     booked_hours = []
-    if booking_type == "onboarding":
+    if booking_type in ("onboarding", "demo_setup"):
         cur3 = db.cursor()
         cur3.execute("""
             SELECT start_datetime FROM bookings
             WHERE user_id = %s AND start_datetime >= %s AND start_datetime < %s
-              AND status != 'cancelled' AND booking_type = 'onboarding'
-        """, (chosen["id"], date_str, next_date))
+              AND status != 'cancelled' AND booking_type = %s
+        """, (chosen["id"], date_str, next_date, booking_type))
         for row in cur3.fetchall():
             try:
                 sdt = row[0] if isinstance(row[0], datetime) else datetime.fromisoformat(str(row[0]))
@@ -882,7 +926,8 @@ def create_booking():
             # Onboarding  -> on_boarding_call (deal datetime ms) + on_boarding_call (company datetime ms).
             try:
                 dt = datetime.fromisoformat(data["start_datetime"])
-                if data.get("booking_type") == "onboarding":
+                btype = data.get("booking_type")
+                if btype == "onboarding":
                     # Onboarding: use actual call start time, interpreted as Pacific Time.
                     call_ms = str(local_dt_to_ms(dt))
                     hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
@@ -892,6 +937,12 @@ def create_booking():
                         hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
                             "properties": {"on_boarding_call": call_ms}
                         })
+                elif btype == "demo_setup":
+                    # Demo Setup Request: push to demo_request_date on deal only.
+                    demo_ms = str(local_dt_to_ms(dt))
+                    hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                        "properties": {"demo_request_date": demo_ms}
+                    })
                 else:
                     # Deployment: install_date_new is a date — midnight UTC of the day.
                     date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
@@ -950,14 +1001,18 @@ def update_booking(bid):
     # Clear the appropriate HubSpot date property on cancellation
     if data.get("status") == "cancelled" and HUBSPOT_API_KEY:
         try:
-            is_onboarding = data.get("booking_type") == "onboarding"
-            deal_prop = "on_boarding_call" if is_onboarding else "install_date_new"
-            company_prop = "on_boarding_call" if is_onboarding else "migrated_00npw00000fv4pz2ad"
-            if data.get("hubspot_deal_id"):
+            btype = data.get("booking_type")
+            if btype == "onboarding":
+                deal_prop, company_prop = "on_boarding_call", "on_boarding_call"
+            elif btype == "demo_setup":
+                deal_prop, company_prop = "demo_request_date", None
+            else:
+                deal_prop, company_prop = "install_date_new", "migrated_00npw00000fv4pz2ad"
+            if data.get("hubspot_deal_id") and deal_prop:
                 hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
                     "properties": {deal_prop: ""}
                 })
-            if data.get("hubspot_company_id"):
+            if data.get("hubspot_company_id") and company_prop:
                 hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
                     "properties": {company_prop: ""}
                 })
@@ -1619,9 +1674,16 @@ def build_booking_html(booking_data, specialist_name, cancelled=False):
     formatted_date, start_time = format_booking_date(booking_data)
     status = "CANCELLED" if cancelled else "Confirmed"
     status_color = "#dc2626" if cancelled else "#16a34a"
-    is_onboarding = booking_data.get("booking_type") == "onboarding"
-    type_label = "Onboarding Call" if is_onboarding else "Deployment"
-    assignee_label = "AIO Buddy" if is_onboarding else "Deployment Specialist"
+    btype = booking_data.get("booking_type")
+    if btype == "onboarding":
+        type_label = "Onboarding Call"
+        assignee_label = "AIO Buddy"
+    elif btype == "demo_setup":
+        type_label = "Demo Setup Request"
+        assignee_label = "Demo Specialist"
+    else:
+        type_label = "Deployment"
+        assignee_label = "Deployment Specialist"
     return f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
         <div style="background: {'#fef2f2' if cancelled else '#f0fdf4'}; border-left: 4px solid {status_color}; padding: 16px; margin-bottom: 20px;">
@@ -1662,7 +1724,8 @@ def send_booking_email(booking_id, booking_data, db, cancelled=False):
             specialist = row["name"]
 
     html_body, formatted_date, status = build_booking_html(booking_data, specialist, cancelled)
-    type_label = "Onboarding Call" if booking_data.get("booking_type") == "onboarding" else "Deployment"
+    _bt = booking_data.get("booking_type")
+    type_label = "Onboarding Call" if _bt == "onboarding" else ("Demo Setup Request" if _bt == "demo_setup" else "Deployment")
     subject = f"{type_label} {status}: {booking_data.get('title', '')} - {formatted_date} ({specialist})"
 
     # Build SendGrid personalizations (one per recipient)

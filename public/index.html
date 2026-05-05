@@ -301,6 +301,7 @@
                         <select id="bookingTypeSelect" onchange="onBookingTypeChange()" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:#fff;">
                             <option value="install">Deployment</option>
                             <option value="onboarding">Onboarding Call</option>
+                            <option value="demo_setup">Demo Setup Request</option>
                         </select>
                     </div>
 
@@ -488,14 +489,16 @@
             assignedUser = null;
             // Update title + hidden fields
             const t = currentBookingType();
-            const isOnboarding = t === "onboarding";
-            document.getElementById("bookingPanelTitle").textContent = isOnboarding ? "Book an Onboarding Call" : "Book a Deployment";
+            const titles = { onboarding: "Book an Onboarding Call", demo_setup: "Book a Demo Setup Request", install: "Book a Deployment" };
+            const labels = { onboarding: "Onboarding Call", demo_setup: "Demo Setup Request", install: "Deployment" };
+            document.getElementById("bookingPanelTitle").textContent = titles[t] || titles.install;
             document.getElementById("bookingType").value = t;
             const badge = document.getElementById("step2TypeBadge");
             if (badge) {
-                badge.textContent = isOnboarding ? "Onboarding Call" : "Deployment";
-                badge.style.background = isOnboarding ? "#d1fae5" : "#dbeafe";
-                badge.style.color = isOnboarding ? "#065f46" : "#1d4ed8";
+                badge.textContent = labels[t] || labels.install;
+                if (t === "onboarding") { badge.style.background = "#d1fae5"; badge.style.color = "#065f46"; }
+                else if (t === "demo_setup") { badge.style.background = "#fef3c7"; badge.style.color = "#92400e"; }
+                else { badge.style.background = "#dbeafe"; badge.style.color = "#1d4ed8"; }
             }
             // Reset right panel
             document.getElementById("startTimeArea").classList.add("hidden");
@@ -551,8 +554,9 @@
             const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
             const today = new Date();
             today.setHours(0,0,0,0);
-            // Lead time: deployments need 48h, onboarding calls need 24h
-            const leadDays = currentBookingType() === "onboarding" ? 1 : 2;
+            // Lead time: deployments need 48h; onboarding & demo setup need 24h
+            const t = currentBookingType();
+            const leadDays = (t === "onboarding" || t === "demo_setup") ? 1 : 2;
             const minDate = new Date(today);
             minDate.setDate(minDate.getDate() + leadDays);
 
@@ -636,8 +640,9 @@
                     // Build start time options from the assigned user's availability hours
                     const startH = parseInt(data.user.start_time ? data.user.start_time.split(":")[0] : "7");
                     const endH = parseInt(data.user.end_time ? data.user.end_time.split(":")[0] : "19");
-                    const isOnboarding = currentBookingType() === "onboarding";
-                    const lastH = isOnboarding ? endH - 1 : endH;
+                    const ct = currentBookingType();
+                    const isHourlySlot = (ct === "onboarding" || ct === "demo_setup");
+                    const lastH = isHourlySlot ? endH - 1 : endH;
                     const bookedHours = (data.user.booked_hours || []);
                     let opts = '<option value="">Choose a start time...</option>';
                     for (let h = startH; h <= lastH; h++) {
@@ -753,10 +758,11 @@
             const opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
             const h = parseInt(selectedStartTime.split(":")[0]);
             const timeLabel = h > 12 ? `${h-12}:00 PM` : h === 12 ? '12:00 PM' : `${h}:00 AM`;
-            const isOnboarding = currentBookingType() === "onboarding";
+            const ct = currentBookingType();
+            const isHourly = (ct === "onboarding" || ct === "demo_setup");
             const endH = h + 1;
             const endLabel = endH > 12 ? `${endH-12}:00 PM` : endH === 12 ? '12:00 PM' : `${endH}:00 AM`;
-            const slotLabel = isOnboarding ? `${timeLabel} – ${endLabel} (1 hour)` : `${timeLabel} (All day)`;
+            const slotLabel = isHourly ? `${timeLabel} – ${endLabel} (1 hour)` : `${timeLabel} (All day)`;
             document.getElementById("step2Summary").textContent =
                 `${d.toLocaleDateString('en-GB', opts)} | Start: ${slotLabel}`;
 
@@ -812,7 +818,8 @@
                         document.getElementById("bookingCompany").value = company.name || "";
                         document.getElementById("bookingAddress").value = [company.address, company.city, company.state, company.zip].filter(Boolean).join(", ");
                         document.getElementById("selectedCompanyId").value = company.id || "";
-                        const typeLabel = currentBookingType() === "onboarding" ? "Onboarding Call" : "Deployment";
+                        const ct = currentBookingType();
+                        const typeLabel = ct === "onboarding" ? "Onboarding Call" : ct === "demo_setup" ? "Demo Setup Request" : "Deployment";
                         document.getElementById("bookingTitle").value = `${typeLabel} - ${company.name || ""}`;
                     }
                 }
@@ -831,9 +838,9 @@
         async function saveBooking() {
             const dateStr = selectedDate.toISOString().slice(0, 10);
             const bookingType = document.getElementById("bookingType").value;
-            // Onboarding calls are 1-hour slots; deployments block the whole day.
+            // Onboarding & demo setup are 1-hour slots; deployments block the whole day.
             let endTime = `${dateStr}T23:59`;
-            if (bookingType === "onboarding") {
+            if (bookingType === "onboarding" || bookingType === "demo_setup") {
                 const sH = parseInt(selectedStartTime.split(":")[0]);
                 endTime = `${dateStr}T${String(sH + 1).padStart(2, '0')}:00`;
             }
