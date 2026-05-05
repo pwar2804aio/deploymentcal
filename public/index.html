@@ -472,6 +472,16 @@
             return el ? el.value : "install";
         }
 
+        // Format a Date object as YYYY-MM-DD using LOCAL components.
+        // Avoids the toISOString() bug where eastern timezones (Pakistan UTC+5)
+        // get the previous day because midnight-local converts back to UTC.
+        function ymd(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + day;
+        }
+
         async function loadAvailableDays() {
             try {
                 const res = await fetch("/api/available-days?booking_type=" + currentBookingType());
@@ -676,7 +686,7 @@
         async function loadBookingsForDate(dateStr) {
             const nextDate = new Date(dateStr + "T00:00:00");
             nextDate.setDate(nextDate.getDate() + 1);
-            const endStr = nextDate.toISOString().slice(0, 10);
+            const endStr = ymd(nextDate);
 
             let url = `/api/bookings?start=${dateStr}&end=${endStr}`;
             if (selectedUserId) url += `&user_id=${selectedUserId}`;
@@ -711,7 +721,7 @@
         function onUserChange() {
             selectedUserId = document.getElementById("userSelect").value;
             if (selectedDate) {
-                const dateStr = selectedDate.toISOString().slice(0, 10);
+                const dateStr = ymd(selectedDate);
                 loadBookingsForDate(dateStr);
             }
         }
@@ -753,7 +763,7 @@
             document.getElementById("stepLine").classList.add("active");
             document.getElementById("stepLabel2").classList.add("active");
 
-            const dateStr = selectedDate.toISOString().slice(0, 10);
+            const dateStr = ymd(selectedDate);
             const d = new Date(dateStr + "T00:00:00");
             const opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
             const h = parseInt(selectedStartTime.split(":")[0]);
@@ -836,7 +846,7 @@
 
         // ── Save booking ──
         async function saveBooking() {
-            const dateStr = selectedDate.toISOString().slice(0, 10);
+            const dateStr = ymd(selectedDate);
             const bookingType = document.getElementById("bookingType").value;
             // Onboarding & demo setup are 1-hour slots; deployments block the whole day.
             let endTime = `${dateStr}T23:59`;
@@ -925,7 +935,7 @@
             const res = await fetch(`/api/bookings/${currentViewBooking.id}`, { method: "DELETE" });
             if (res.ok) {
                 closeViewModal();
-                if (selectedDate) selectDate(selectedDate.toISOString().slice(0, 10));
+                if (selectedDate) selectDate(ymd(selectedDate));
             }
         }
 

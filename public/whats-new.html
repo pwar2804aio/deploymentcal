@@ -115,6 +115,13 @@
         // Changelog — newest first. Update this list with each release.
         const CHANGELOG = [
             {
+                version: "2.12.7",
+                date: "2026-04-08",
+                changes: [
+                    { tag: "fix", text: "Fixed timezone bug for users east of UTC (Pakistan team). Booking the 6th May would save as the 5th May because toISOString() converts midnight-local to the previous day in UTC. Date is now formatted from local components throughout." },
+                ],
+            },
+            {
                 version: "2.12.1",
                 date: "2026-04-08",
                 changes: [
