@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.12.5"
+VERSION = "2.12.6"
 
 
 def local_dt_to_ms(dt_naive):
@@ -976,15 +976,18 @@ def create_booking():
                         })
                 elif btype == "demo_setup":
                     # Demo Setup Request: push call start time (PT) to the custom
-                    # datetime field demo_request_date on the deal.
-                    demo_ms = str(local_dt_to_ms(dt))
-                    try:
-                        hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
-                            "properties": {"demo_request_date": demo_ms}
-                        })
-                        result["demo_request_date"] = f"sent ({dt.strftime('%Y-%m-%d %H:%M')} PT)"
-                    except Exception as ee:
-                        result["demo_request_date_error"] = str(ee)
+                    # datetime field demo_request_date on the COMPANY.
+                    if data.get("hubspot_company_id"):
+                        demo_ms = str(local_dt_to_ms(dt))
+                        try:
+                            hubspot_request("PATCH", f"/crm/v3/objects/companies/{data['hubspot_company_id']}", {
+                                "properties": {"demo_request_date": demo_ms}
+                            })
+                            result["demo_request_date"] = f"sent ({dt.strftime('%Y-%m-%d %H:%M')} PT)"
+                        except Exception as ee:
+                            result["demo_request_date_error"] = str(ee)
+                    else:
+                        result["demo_request_date_error"] = "no hubspot_company_id on booking"
                 else:
                     # Deployment: install_date_new is a date — midnight UTC of the day.
                     date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
@@ -1047,7 +1050,7 @@ def update_booking(bid):
             if btype == "onboarding":
                 deal_prop, company_prop = "on_boarding_call", "on_boarding_call"
             elif btype == "demo_setup":
-                deal_prop, company_prop = "demo_request_date", None
+                deal_prop, company_prop = None, "demo_request_date"
             else:
                 deal_prop, company_prop = "install_date_new", "migrated_00npw00000fv4pz2ad"
             if data.get("hubspot_deal_id") and deal_prop:
