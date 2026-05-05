@@ -878,6 +878,8 @@
                 let msg = "Booking confirmed!";
                 if (result.hubspot_note === "sent") msg += "\nHubSpot note created.";
                 else if (result.hubspot_note) msg += "\nHubSpot note: " + result.hubspot_note;
+                if (result.demo_request_date) msg += "\ndemo_request_date pushed (" + result.demo_request_date + ").";
+                if (result.demo_request_date_error) msg += "\n⚠ demo_request_date FAILED: " + result.demo_request_date_error;
                 if (result.email_sent === "sent") msg += "\nCalendar invite emailed.";
                 else if (result.email_sent) msg += "\nEmail: " + result.email_sent;
                 alert(msg);

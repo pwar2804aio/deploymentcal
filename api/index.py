@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.12.2"
+VERSION = "2.12.3"
 
 
 def local_dt_to_ms(dt_naive):
@@ -422,6 +422,31 @@ def get_hubspot_deals():
             if not after:
                 break
         return jsonify(deals)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/hubspot/deal-properties/<search>")
+@require_auth
+def hubspot_search_deal_properties(search):
+    """Debug: list deal properties whose internal name OR label contains <search>."""
+    if not HUBSPOT_API_KEY:
+        return jsonify({"error": "HubSpot API key not configured"}), 400
+    try:
+        result = hubspot_request("GET", "/crm/v3/properties/deals")
+        s = (search or "").lower()
+        matches = []
+        for p in result.get("results", []):
+            name = p.get("name", "")
+            label = p.get("label", "")
+            if s in name.lower() or s in label.lower():
+                matches.append({
+                    "name": name,
+                    "label": label,
+                    "type": p.get("type"),
+                    "fieldType": p.get("fieldType"),
+                })
+        return jsonify({"matches": matches, "count": len(matches)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
