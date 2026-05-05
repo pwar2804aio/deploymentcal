@@ -20,7 +20,7 @@ import psycopg2.extras
 import requests
 from flask import Flask, request, jsonify, g
 
-VERSION = "2.12.1"
+VERSION = "2.12.2"
 
 
 def local_dt_to_ms(dt_naive):
@@ -944,10 +944,23 @@ def create_booking():
                         })
                 elif btype == "demo_setup":
                     # Demo Setup Request: push to demo_request_date on deal only.
-                    demo_ms = str(local_dt_to_ms(dt))
-                    hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
-                        "properties": {"demo_request_date": demo_ms}
-                    })
+                    # Try as a datetime field first; if HubSpot rejects (because the
+                    # property is a date, not datetime) fall back to midnight-UTC ms.
+                    datetime_ms = str(local_dt_to_ms(dt))
+                    date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
+                    try:
+                        hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                            "properties": {"demo_request_date": datetime_ms}
+                        })
+                        result["demo_request_date"] = "datetime"
+                    except Exception as ee1:
+                        try:
+                            hubspot_request("PATCH", f"/crm/v3/objects/deals/{data['hubspot_deal_id']}", {
+                                "properties": {"demo_request_date": date_ms}
+                            })
+                            result["demo_request_date"] = "date"
+                        except Exception as ee2:
+                            result["demo_request_date_error"] = f"datetime: {ee1}; date: {ee2}"
                 else:
                     # Deployment: install_date_new is a date — midnight UTC of the day.
                     date_ms = str(int(datetime(dt.year, dt.month, dt.day).timestamp() * 1000))
